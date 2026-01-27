@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Prompt Filler
 // @namespace    local.eric.promptfiller
-// @version      0.4.4
+// @version      0.4.5
 // @description  Local prompt library for ChatGPT: categories + add/edit/delete + import/export JSON + insert into composer.
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
