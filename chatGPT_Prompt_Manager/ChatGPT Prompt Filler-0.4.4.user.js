@@ -284,6 +284,9 @@ Constraints:
       display: none;
       font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     }
+    #pf_panel.pf_manage {
+      width: min(900px, 92vw);
+    }
 
     #pf_panel header {
       display: flex;
@@ -325,15 +328,22 @@ Constraints:
 
     #pf_panel input[type="text"], #pf_panel textarea, #pf_panel select {
       width: 100%;
-      padding: 8px 10px;
+      padding: 10px 12px;
       border-radius: 10px;
       background: rgba(18, 18, 22, 0.95);
       color: #e6e6eb;
       border: 1px solid rgba(255,255,255,0.18);
       outline: none;
       box-sizing: border-box;
+      font-size: 13px;
     }
-    #pf_panel textarea { min-height: 120px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; }
+    #pf_panel textarea {
+      min-height: 220px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.4;
+    }
 
     #pf_panel input::placeholder { color: rgba(230,230,235,0.45); }
 
@@ -476,6 +486,7 @@ Constraints:
     function showPanel() {
       panel.style.display = 'block';
       elAutoSend.checked = getAutoSend();
+      panel.classList.toggle('pf_manage', activeTab === 'manage');
       renderAll();
       (activeTab === 'use' ? elSearch : elNewCatName).focus();
     }
@@ -500,6 +511,7 @@ Constraints:
         panel.querySelectorAll('.pf_tab').forEach(t => t.classList.toggle('active', t.dataset.tab === activeTab));
         elTabUse.style.display = activeTab === 'use' ? 'block' : 'none';
         elTabManage.style.display = activeTab === 'manage' ? 'block' : 'none';
+        panel.classList.toggle('pf_manage', activeTab === 'manage');
         renderAll();
       });
     });
@@ -923,17 +935,18 @@ Constraints:
 
             const idx = data2.prompts.findIndex(p => p.id === editingPromptId);
             if (idx < 0) {
-              // Stale edit state: treat as "Add" instead of failing.
-              data2.prompts.push({ id: uid('p'), categoryId, title, body });
-              saveLibrary(data2);
+              alert('Could not find the prompt you were editing. It may have been deleted.');
               editingPromptId = null;
               renderEditor();
               return;
             }
 
-            data2.prompts[idx].title = title;
-            data2.prompts[idx].body = body;
-            data2.prompts[idx].categoryId = categoryId;
+            data2.prompts[idx] = {
+              ...data2.prompts[idx],
+              title,
+              body,
+              categoryId
+            };
 
             saveLibrary(data2);
             editingPromptId = null;
