@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Prompt Filler
 // @namespace    local.eric.promptfiller
-// @version      0.4.6
+// @version      0.4.7
 // @description  Local prompt library for ChatGPT: categories + add/edit/delete + checkpoints + import/export JSON + insert into composer.
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
@@ -16,12 +16,14 @@
   // -----------------------------
   // Sample library (optional)
   // -----------------------------
+  const SAMPLE_CATEGORIES = [
+    { id: 'cat_work', name: 'Work / InfoSec' },
+    { id: 'cat_science', name: 'Philosophy / Science' },
+    { id: 'cat_scratch', name: 'Scratch' },
+  ];
+
   const SAMPLE_LIBRARY = {
-    categories: [
-      { id: 'cat_work', name: 'Work / InfoSec' },
-      { id: 'cat_science', name: 'Philosophy / Science' },
-      { id: 'cat_scratch', name: 'Scratch' },
-    ],
+    categories: SAMPLE_CATEGORIES,
     prompts: [
       {
         id: 'p_risk_summary',
@@ -78,6 +80,7 @@ Constraints:
         body: `Context:\n\nGoal:\n\nConstraints:\n\nWhat I tried:\n\nQuestion:`
       }
     ],
+    checkpointCategories: SAMPLE_CATEGORIES.map(c => ({ ...c })),
     checkpoints: []
   };
 
@@ -105,6 +108,10 @@ Constraints:
     return String(s).replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
     }[c]));
+  }
+
+  function cloneCategories(categories) {
+    return (categories || []).map(c => ({ id: c.id, name: c.name }));
   }
 
   function isVisible(el) {
@@ -219,6 +226,17 @@ Constraints:
     const dupPrompt = dupCheck(obj.prompts, 'id');
     if (dupPrompt) return { ok: false, error: `Duplicate prompt id: ${dupPrompt}` };
 
+    if (obj.checkpointCategories !== undefined) {
+      if (!Array.isArray(obj.checkpointCategories)) return { ok: false, error: 'Missing "checkpointCategories" array.' };
+      for (const c of obj.checkpointCategories) {
+        if (!c || typeof c !== 'object') return { ok: false, error: 'Checkpoint category entries must be objects.' };
+        if (typeof c.id !== 'string' || !c.id.trim()) return { ok: false, error: 'Each checkpoint category must have a non-empty string id.' };
+        if (typeof c.name !== 'string' || !c.name.trim()) return { ok: false, error: 'Each checkpoint category must have a non-empty string name.' };
+      }
+      const dupCheckpointCat = dupCheck(obj.checkpointCategories, 'id');
+      if (dupCheckpointCat) return { ok: false, error: `Duplicate checkpoint category id: ${dupCheckpointCat}` };
+    }
+
     if (obj.checkpoints !== undefined) {
       if (!Array.isArray(obj.checkpoints)) return { ok: false, error: 'Checkpoints must be an array when provided.' };
       for (const c of obj.checkpoints) {
@@ -230,6 +248,13 @@ Constraints:
         if (typeof c.body !== 'string') return { ok: false, error: 'Each checkpoint must have a string body.' };
         if (typeof c.savedAt !== 'string' || !c.savedAt.trim()) return { ok: false, error: 'Each checkpoint must have a savedAt ISO string.' };
       }
+      const checkpointCatSource = Array.isArray(obj.checkpointCategories) ? obj.checkpointCategories : obj.categories;
+      const checkpointCatIds = new Set(checkpointCatSource.map(c => c.id));
+      for (const cp of obj.checkpoints) {
+        if (!checkpointCatIds.has(cp.categoryId)) {
+          return { ok: false, error: `Checkpoint "${cp.title}" references missing categoryId "${cp.categoryId}".` };
+        }
+      }
       const dupCheckpoint = dupCheck(obj.checkpoints, 'id');
       if (dupCheckpoint) return { ok: false, error: `Duplicate checkpoint id: ${dupCheckpoint}` };
     }
@@ -239,13 +264,14 @@ Constraints:
 
   // -----------------------------
   // Library data model
-  // data = { categories: [{id,name}], prompts:[{id,categoryId,title,body}], checkpoints:[{id,categoryId,title,description,body,savedAt}] }
+  // data = { categories: [{id,name}], prompts:[{id,categoryId,title,body}], checkpointCategories:[{id,name}], checkpoints:[{id,categoryId,title,description,body,savedAt}] }
   // -----------------------------
   function loadLibrary() {
     const raw = (() => { try { return GM_getValue(KEY_DATA, ''); } catch { return ''; } })();
     const parsed = safeJsonParse(raw, null);
     if (parsed && Array.isArray(parsed.categories) && Array.isArray(parsed.prompts)) {
       if (!Array.isArray(parsed.checkpoints)) parsed.checkpoints = [];
+      if (!Array.isArray(parsed.checkpointCategories)) parsed.checkpointCategories = cloneCategories(parsed.categories);
       return parsed;
     }
 
@@ -263,9 +289,11 @@ Constraints:
 
   function normalizeLibrary(data) {
     if (!Array.isArray(data.checkpoints)) data.checkpoints = [];
+    if (!Array.isArray(data.checkpointCategories)) data.checkpointCategories = cloneCategories(data.categories);
     const catIds = new Set(data.categories.map(c => c.id));
+    const checkpointCatIds = new Set(data.checkpointCategories.map(c => c.id));
     data.prompts = data.prompts.filter(p => catIds.has(p.categoryId));
-    data.checkpoints = data.checkpoints.filter(c => catIds.has(c.categoryId));
+    data.checkpoints = data.checkpoints.filter(c => checkpointCatIds.has(c.categoryId));
   }
 
   // -----------------------------
@@ -483,6 +511,15 @@ Constraints:
           Save agent checkpoints for later reuse. Stored locally in Tampermonkey alongside your prompt library.
         </div>
         <div class="pf_section">
+          <div class="pf_group">Checkpoint categories</div>
+          <div class="pf_two">
+            <input id="pf_newcp_cat_name" type="text" placeholder="New checkpoint category name..." />
+            <button id="pf_addcp_cat" class="pf_btn2">Add checkpoint category</button>
+          </div>
+          <div id="pf_cp_cats" style="margin-top:8px;"></div>
+        </div>
+
+        <div class="pf_section">
           <div class="pf_group">Checkpoint editor</div>
           <div class="pf_two">
             <button id="pf_newcheckpoint" class="pf_btn2">New checkpoint</button>
@@ -521,6 +558,10 @@ Constraints:
     const elExport = panel.querySelector('#pf_export');
     const elImport = panel.querySelector('#pf_import');
     const elImportFile = panel.querySelector('#pf_import_file');
+
+    const elCheckpointCats = panel.querySelector('#pf_cp_cats');
+    const elNewCheckpointCatName = panel.querySelector('#pf_newcp_cat_name');
+    const elAddCheckpointCat = panel.querySelector('#pf_addcp_cat');
 
     const elNewCheckpoint = panel.querySelector('#pf_newcheckpoint');
     const elCheckpointEditor = panel.querySelector('#pf_checkpoint_editor');
@@ -575,6 +616,17 @@ Constraints:
       renderManage();
     });
 
+    // ---- Checkpoint category actions ----
+    elAddCheckpointCat.addEventListener('click', () => {
+      const name = (elNewCheckpointCatName.value || '').trim();
+      if (!name) return;
+      const data = loadLibrary();
+      data.checkpointCategories.push({ id: uid('cpcat'), name });
+      saveLibrary(data);
+      elNewCheckpointCatName.value = '';
+      renderCheckpoints();
+    });
+
     // ---- Prompt actions ----
     elNewPrompt.addEventListener('click', () => {
       editingPromptId = 'NEW';
@@ -593,7 +645,7 @@ Constraints:
       const upper = choice.trim().toUpperCase();
 
       if (upper === 'CLEAR') {
-        saveLibrary({ categories: [], prompts: [], checkpoints: [] });
+        saveLibrary({ categories: [], prompts: [], checkpointCategories: [], checkpoints: [] });
         editingPromptId = null;
         editingCheckpointId = null;
         renderManage();
@@ -619,7 +671,7 @@ Constraints:
         meta: {
           exportedAt: new Date().toISOString(),
           schema: 'pf_library_v1',
-          scriptVersion: '0.4.6'
+          scriptVersion: '0.4.7'
         },
         data
       };
@@ -655,11 +707,20 @@ Constraints:
       }
 
       const current = loadLibrary();
+      const incoming = {
+        ...candidate,
+        checkpoints: Array.isArray(candidate.checkpoints) ? candidate.checkpoints : [],
+        checkpointCategories: Array.isArray(candidate.checkpointCategories)
+          ? candidate.checkpointCategories
+          : cloneCategories(candidate.categories)
+      };
 
       const ok = confirm(
         `Import will REPLACE your current library.\n\n` +
-        `Current: ${current.categories.length} categories, ${current.prompts.length} prompts\n` +
-        `Incoming: ${candidate.categories.length} categories, ${candidate.prompts.length} prompts\n\n` +
+        `Current: ${current.categories.length} categories, ${current.prompts.length} prompts, ` +
+        `${current.checkpointCategories.length} checkpoint categories, ${current.checkpoints.length} checkpoints\n` +
+        `Incoming: ${incoming.categories.length} categories, ${incoming.prompts.length} prompts, ` +
+        `${incoming.checkpointCategories.length} checkpoint categories, ${incoming.checkpoints.length} checkpoints\n\n` +
         `Proceed?`
       );
       if (!ok) return;
@@ -667,12 +728,13 @@ Constraints:
       // Save rollback snapshot (local storage)
       try {
         GM_setValue(KEY_BACKUP_LAST, JSON.stringify({
-          meta: { backedUpAt: new Date().toISOString(), schema: 'pf_library_v1', scriptVersion: '0.4.6' },
+          meta: { backedUpAt: new Date().toISOString(), schema: 'pf_library_v1', scriptVersion: '0.4.7' },
           data: current
         }));
       } catch { /* ignore */ }
 
-      saveLibrary(candidate);
+      normalizeLibrary(incoming);
+      saveLibrary(incoming);
       editingPromptId = null;
       renderAll();
     });
@@ -804,16 +866,14 @@ Constraints:
           if (act === 'cat_delete') {
             const cat = data2.categories[idx];
             const promptCount = data2.prompts.filter(p => p.categoryId === cat.id).length;
-            const checkpointCount = data2.checkpoints.filter(c => c.categoryId === cat.id).length;
             const ok = confirm(
               `Delete category "${cat.name}"?\n` +
-              `This will also delete ${promptCount} prompt(s) and ${checkpointCount} checkpoint(s) in it.`
+              `This will also delete ${promptCount} prompt(s) in it.`
             );
             if (!ok) return;
 
             data2.categories = data2.categories.filter(c => c.id !== cat.id);
             data2.prompts = data2.prompts.filter(p => p.categoryId !== cat.id);
-            data2.checkpoints = data2.checkpoints.filter(c => c.categoryId !== cat.id);
             saveLibrary(data2);
 
             if (editingPromptId && editingPromptId !== 'NEW') {
@@ -822,6 +882,79 @@ Constraints:
             }
 
             renderManage();
+          }
+        });
+      });
+    }
+
+    function renderCheckpointCategories() {
+      const data = loadLibrary();
+
+      if (!data.checkpointCategories.length) {
+        elCheckpointCats.innerHTML = `<div class="pf_help">No checkpoint categories yet. Add one above.</div>`;
+        return;
+      }
+
+      elCheckpointCats.innerHTML = data.checkpointCategories.map((c, idx) => `
+        <div class="pf_item" style="cursor: default;">
+          <div class="pf_title">${escHtml(c.name)}</div>
+          <div class="pf_inline_actions">
+            <button class="pf_smallbtn" data-act="cp_cat_up" data-id="${escHtml(c.id)}" ${idx === 0 ? 'disabled' : ''}>↑</button>
+            <button class="pf_smallbtn" data-act="cp_cat_down" data-id="${escHtml(c.id)}" ${idx === data.checkpointCategories.length - 1 ? 'disabled' : ''}>↓</button>
+            <button class="pf_smallbtn" data-act="cp_cat_rename" data-id="${escHtml(c.id)}">Rename</button>
+            <button class="pf_smallbtn" data-act="cp_cat_delete" data-id="${escHtml(c.id)}">Delete</button>
+          </div>
+        </div>
+      `).join('');
+
+      elCheckpointCats.querySelectorAll('button[data-act]').forEach(b => {
+        b.addEventListener('click', () => {
+          const act = b.dataset.act;
+          const id = b.dataset.id;
+          const data2 = loadLibrary();
+
+          const idx = data2.checkpointCategories.findIndex(x => x.id === id);
+          if (idx < 0) return;
+
+          if (act === 'cp_cat_up' && idx > 0) {
+            [data2.checkpointCategories[idx - 1], data2.checkpointCategories[idx]] = [data2.checkpointCategories[idx], data2.checkpointCategories[idx - 1]];
+            saveLibrary(data2);
+            renderCheckpoints();
+            return;
+          }
+          if (act === 'cp_cat_down' && idx < data2.checkpointCategories.length - 1) {
+            [data2.checkpointCategories[idx + 1], data2.checkpointCategories[idx]] = [data2.checkpointCategories[idx], data2.checkpointCategories[idx + 1]];
+            saveLibrary(data2);
+            renderCheckpoints();
+            return;
+          }
+          if (act === 'cp_cat_rename') {
+            const newName = prompt('Rename checkpoint category:', data2.checkpointCategories[idx].name);
+            if (!newName) return;
+            data2.checkpointCategories[idx].name = newName.trim() || data2.checkpointCategories[idx].name;
+            saveLibrary(data2);
+            renderCheckpoints();
+            return;
+          }
+          if (act === 'cp_cat_delete') {
+            const cat = data2.checkpointCategories[idx];
+            const checkpointCount = data2.checkpoints.filter(c => c.categoryId === cat.id).length;
+            const ok = confirm(
+              `Delete checkpoint category "${cat.name}"?\n` +
+              `This will also delete ${checkpointCount} checkpoint(s) in it.`
+            );
+            if (!ok) return;
+
+            data2.checkpointCategories = data2.checkpointCategories.filter(c => c.id !== cat.id);
+            data2.checkpoints = data2.checkpoints.filter(c => c.categoryId !== cat.id);
+            saveLibrary(data2);
+
+            if (editingCheckpointId && editingCheckpointId !== 'NEW') {
+              const stillExists = data2.checkpoints.some(c => c.id === editingCheckpointId);
+              if (!stillExists) editingCheckpointId = null;
+            }
+
+            renderCheckpoints();
           }
         });
       });
@@ -1021,7 +1154,9 @@ Constraints:
       normalizeLibrary(data);
       saveLibrary(data);
 
-      const checkpointsByCat = data.categories.map(cat => {
+      renderCheckpointCategories();
+
+      const checkpointsByCat = data.checkpointCategories.map(cat => {
         const list = data.checkpoints.filter(c => c.categoryId === cat.id);
         if (!list.length) return '';
 
@@ -1031,6 +1166,7 @@ Constraints:
             <div class="pf_help">${escHtml(c.description || '')}</div>
             <div class="pf_meta">Saved: ${escHtml(new Date(c.savedAt).toLocaleString())}</div>
             <div class="pf_inline_actions">
+              <button class="pf_smallbtn" data-act="cp_send" data-id="${escHtml(c.id)}">Send</button>
               <button class="pf_smallbtn" data-act="cp_up" data-id="${escHtml(c.id)}" ${idx === 0 ? 'disabled' : ''}>↑</button>
               <button class="pf_smallbtn" data-act="cp_down" data-id="${escHtml(c.id)}" ${idx === list.length - 1 ? 'disabled' : ''}>↓</button>
               <button class="pf_smallbtn" data-act="cp_edit" data-id="${escHtml(c.id)}">Edit</button>
@@ -1049,17 +1185,18 @@ Constraints:
         editing = data.checkpoints.find(c => c.id === editingCheckpointId) || null;
       }
 
-      const catOptions = data.categories.map((c, i) => {
+      const isNewCheckpoint = editingCheckpointId === 'NEW' || !editingCheckpointId;
+      const catOptions = data.checkpointCategories.map((c, i) => {
         const selected =
-          (editingCheckpointId === 'NEW' && i === 0) ||
+          (isNewCheckpoint && i === 0) ||
           (editing && editing.categoryId === c.id);
         return `<option value="${escHtml(c.id)}" ${selected ? 'selected' : ''}>${escHtml(c.name)}</option>`;
       }).join('');
 
-      const editorDisabled = data.categories.length === 0;
+      const editorDisabled = data.checkpointCategories.length === 0;
 
       const editorHtml = `
-        ${editorDisabled ? `<div class="pf_help">Create a category first (Manage tab), then you can add checkpoints.</div>` : `
+        ${editorDisabled ? `<div class="pf_help">Create a checkpoint category first (above), then you can add checkpoints.</div>` : `
           <div class="pf_two">
             <input id="pf_cp_title" type="text" placeholder="Checkpoint title..." value="${escHtml(editing?.title ?? '')}" />
             <select id="pf_cp_cat">${catOptions}</select>
@@ -1071,7 +1208,7 @@ Constraints:
             <textarea id="pf_cp_body" placeholder="Checkpoint text...">${escHtml(editing?.body ?? '')}</textarea>
           </div>
           <div class="pf_inline_actions">
-            <button id="pf_cp_save" class="pf_smallbtn">${editingCheckpointId === 'NEW' ? 'Add' : 'Save'}</button>
+            <button id="pf_cp_save" class="pf_smallbtn">${isNewCheckpoint ? 'Add' : 'Save'}</button>
             <button id="pf_cp_cancel" class="pf_smallbtn">Cancel</button>
           </div>
           <div class="pf_help" style="margin-top:8px;">
@@ -1088,7 +1225,7 @@ Constraints:
       `;
 
       elCheckpointEditor.querySelectorAll('button[data-act]').forEach(b => {
-        b.addEventListener('click', () => {
+        b.addEventListener('click', async () => {
           const act = b.dataset.act;
           const id = b.dataset.id;
           const data2 = loadLibrary();
@@ -1096,6 +1233,20 @@ Constraints:
           if (idx < 0) return;
 
           const c = data2.checkpoints[idx];
+
+          if (act === 'cp_send') {
+            const composer = findComposerElement();
+            if (!composer) {
+              alert('Could not find the ChatGPT message box. The UI may have changed.');
+              return;
+            }
+
+            setComposerText(composer, c.body);
+            await sleep(60);
+            await clickSendIfEnabled();
+            hidePanel();
+            return;
+          }
 
           if (act === 'cp_edit') {
             editingCheckpointId = id;
@@ -1158,8 +1309,8 @@ Constraints:
             ev.stopPropagation();
 
             const data2 = loadLibrary();
-            if (data2.categories.length === 0) {
-              alert('Create a category first.');
+            if (data2.checkpointCategories.length === 0) {
+              alert('Create a checkpoint category first.');
               return;
             }
 
@@ -1175,7 +1326,7 @@ Constraints:
 
             const savedAt = new Date().toISOString();
 
-            if (editingCheckpointId === 'NEW') {
+            if (!editingCheckpointId || editingCheckpointId === 'NEW') {
               data2.checkpoints.push({ id: uid('cp'), categoryId, title, description, body, savedAt });
               saveLibrary(data2);
               editingCheckpointId = null;
