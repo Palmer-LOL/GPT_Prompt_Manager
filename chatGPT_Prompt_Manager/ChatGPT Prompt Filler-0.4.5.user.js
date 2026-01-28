@@ -114,6 +114,31 @@ Constraints:
     return (categories || []).map(c => ({ id: c.id, name: c.name }));
   }
 
+  function getEstTimestamp(date = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZoneName: 'shortOffset'
+    }).formatToParts(date);
+
+    const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
+    const offsetMatch = (map.timeZoneName || '').match(/GMT([+-]\d{1,2})/);
+    let offset = '';
+    if (offsetMatch) {
+      const hours = Math.abs(parseInt(offsetMatch[1], 10));
+      const sign = parseInt(offsetMatch[1], 10) >= 0 ? '+' : '-';
+      offset = `${sign}${String(hours).padStart(2, '0')}:00`;
+    }
+
+    return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}:${map.second}${offset}`;
+  }
+
   function isVisible(el) {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
@@ -437,6 +462,13 @@ Constraints:
 
     .pf_help { font-size: 12px; opacity: 0.8; line-height: 1.35; }
     .pf_two { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .pf_stack { display:flex; flex-direction: column; gap: 8px; }
+    .pf_manage_grid { display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+    .pf_action_grid { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    @media (max-width: 900px) {
+      .pf_manage_grid { grid-template-columns: 1fr; }
+      .pf_action_grid { grid-template-columns: 1fr; }
+    }
   `);
 
   // -----------------------------
@@ -479,30 +511,44 @@ Constraints:
         </div>
 
         <div class="pf_section">
-          <div class="pf_group">Categories</div>
-          <div class="pf_two">
-            <input id="pf_newcat_name" type="text" placeholder="New category name..." />
-            <button id="pf_addcat" class="pf_btn2">Add category</button>
-          </div>
-          <div id="pf_cats" style="margin-top:8px;"></div>
+          <div class="pf_group">Prompt editor</div>
+          <div id="pf_editor"></div>
         </div>
 
         <div class="pf_section">
-          <div class="pf_group">Prompts</div>
+          <div class="pf_group">Create category</div>
+          <div class="pf_stack">
+            <input id="pf_newcat_name" type="text" placeholder="New category name..." />
+            <button id="pf_addcat" class="pf_btn2">Add category</button>
+          </div>
+        </div>
 
-          <div class="pf_two">
+        <div class="pf_section">
+          <div class="pf_group">Prompt tools</div>
+          <div class="pf_action_grid">
             <button id="pf_newprompt" class="pf_btn2">New prompt</button>
             <button id="pf_reset" class="pf_btn2" title="Clear all prompts/categories or restore sample library.">Reset library</button>
           </div>
 
-          <div class="pf_two" style="margin-top:8px;">
+          <div class="pf_action_grid" style="margin-top:8px;">
             <button id="pf_export" class="pf_btn2" title="Download your library as JSON.">Export JSON</button>
             <button id="pf_import" class="pf_btn2" title="Import a JSON library file (replaces current).">Import JSON</button>
           </div>
 
           <input id="pf_import_file" type="file" accept="application/json,.json" style="display:none;" />
+        </div>
 
-          <div id="pf_editor" style="margin-top:10px;"></div>
+        <div class="pf_section">
+          <div class="pf_manage_grid">
+            <div>
+              <div class="pf_group">Categories</div>
+              <div id="pf_cats" style="margin-top:8px;"></div>
+            </div>
+            <div>
+              <div class="pf_group">Prompts</div>
+              <div id="pf_prompt_list" style="margin-top:8px;"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -511,21 +557,36 @@ Constraints:
           Save agent checkpoints for later reuse. Stored locally in Tampermonkey alongside your prompt library.
         </div>
         <div class="pf_section">
-          <div class="pf_group">Checkpoint categories</div>
-          <div class="pf_two">
-            <input id="pf_newcp_cat_name" type="text" placeholder="New checkpoint category name..." />
-            <button id="pf_addcp_cat" class="pf_btn2">Add checkpoint category</button>
-          </div>
-          <div id="pf_cp_cats" style="margin-top:8px;"></div>
+          <div class="pf_group">Checkpoint editor</div>
+          <div id="pf_checkpoint_editor"></div>
         </div>
 
         <div class="pf_section">
-          <div class="pf_group">Checkpoint editor</div>
-          <div class="pf_two">
-            <button id="pf_newcheckpoint" class="pf_btn2">New checkpoint</button>
-            <div></div>
+          <div class="pf_group">Create checkpoint category</div>
+          <div class="pf_stack">
+            <input id="pf_newcp_cat_name" type="text" placeholder="New checkpoint category name..." />
+            <button id="pf_addcp_cat" class="pf_btn2">Add checkpoint category</button>
           </div>
-          <div id="pf_checkpoint_editor" style="margin-top:10px;"></div>
+        </div>
+
+        <div class="pf_section">
+          <div class="pf_group">Checkpoint tools</div>
+          <div class="pf_stack">
+            <button id="pf_newcheckpoint" class="pf_btn2">New checkpoint</button>
+          </div>
+        </div>
+
+        <div class="pf_section">
+          <div class="pf_manage_grid">
+            <div>
+              <div class="pf_group">Checkpoint categories</div>
+              <div id="pf_cp_cats" style="margin-top:8px;"></div>
+            </div>
+            <div>
+              <div class="pf_group">Checkpoints</div>
+              <div id="pf_checkpoint_list" style="margin-top:8px;"></div>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -565,6 +626,8 @@ Constraints:
 
     const elNewCheckpoint = panel.querySelector('#pf_newcheckpoint');
     const elCheckpointEditor = panel.querySelector('#pf_checkpoint_editor');
+    const elPromptList = panel.querySelector('#pf_prompt_list');
+    const elCheckpointList = panel.querySelector('#pf_checkpoint_list');
 
     function showPanel() {
       panel.style.display = 'block';
@@ -666,10 +729,11 @@ Constraints:
     elExport.addEventListener('click', () => {
       const data = loadLibrary();
       normalizeLibrary(data);
+      const exportedAt = getEstTimestamp();
 
       const payload = {
         meta: {
-          exportedAt: new Date().toISOString(),
+          exportedAt,
           schema: 'pf_library_v1',
           scriptVersion: '0.4.7'
         },
@@ -728,7 +792,7 @@ Constraints:
       // Save rollback snapshot (local storage)
       try {
         GM_setValue(KEY_BACKUP_LAST, JSON.stringify({
-          meta: { backedUpAt: new Date().toISOString(), schema: 'pf_library_v1', scriptVersion: '0.4.7' },
+          meta: { backedUpAt: getEstTimestamp(), schema: 'pf_library_v1', scriptVersion: '0.4.7' },
           data: current
         }));
       } catch { /* ignore */ }
@@ -999,35 +1063,29 @@ Constraints:
 
       const editorDisabled = data.categories.length === 0;
 
-      const editorHtml = `
-        <div class="pf_group">Prompt editor</div>
-        ${editorDisabled ? `<div class="pf_help">Create a category first (above), then you can add prompts.</div>` : `
-          <div class="pf_two">
+      elPromptList.innerHTML = promptListHtml;
+
+      const editorHtml = editorDisabled
+        ? `<div class="pf_help">Create a category first (above), then you can add prompts.</div>`
+        : `
+          <div class="pf_stack">
             <input id="pf_ed_title" type="text" placeholder="Prompt title..." value="${escHtml(editing?.title ?? '')}" />
             <select id="pf_ed_cat">${catOptions}</select>
-          </div>
-          <div style="margin-top:8px;">
             <textarea id="pf_ed_body" placeholder="Prompt body...">${escHtml(editing?.body ?? '')}</textarea>
+            <div class="pf_inline_actions">
+              <button id="pf_ed_save" class="pf_smallbtn">${editingPromptId === 'NEW' ? 'Add' : 'Save'}</button>
+              <button id="pf_ed_cancel" class="pf_smallbtn">Cancel</button>
+            </div>
+            <div class="pf_help">
+              Tip: keep placeholders like &lt;PASTE HERE&gt; or {{thing}} if you like. This script just inserts text.
+            </div>
           </div>
-          <div class="pf_inline_actions">
-            <button id="pf_ed_save" class="pf_smallbtn">${editingPromptId === 'NEW' ? 'Add' : 'Save'}</button>
-            <button id="pf_ed_cancel" class="pf_smallbtn">Cancel</button>
-          </div>
-          <div class="pf_help" style="margin-top:8px;">
-            Tip: keep placeholders like &lt;PASTE HERE&gt; or {{thing}} if you like. This script just inserts text.
-          </div>
-        `}
-      `;
+        `;
 
-      elEditor.innerHTML = `
-        <div class="pf_two">
-          <div>${promptListHtml}</div>
-          <div>${editorHtml}</div>
-        </div>
-      `;
+      elEditor.innerHTML = editorHtml;
 
       // Prompt list button handlers
-      elEditor.querySelectorAll('button[data-act]').forEach(b => {
+      elPromptList.querySelectorAll('button[data-act]').forEach(b => {
         b.addEventListener('click', () => {
           const act = b.dataset.act;
           const id = b.dataset.id;
@@ -1195,36 +1253,29 @@ Constraints:
 
       const editorDisabled = data.checkpointCategories.length === 0;
 
-      const editorHtml = `
-        ${editorDisabled ? `<div class="pf_help">Create a checkpoint category first (above), then you can add checkpoints.</div>` : `
-          <div class="pf_two">
+      elCheckpointList.innerHTML = checkpointListHtml;
+
+      const editorHtml = editorDisabled
+        ? `<div class="pf_help">Create a checkpoint category first (above), then you can add checkpoints.</div>`
+        : `
+          <div class="pf_stack">
             <input id="pf_cp_title" type="text" placeholder="Checkpoint title..." value="${escHtml(editing?.title ?? '')}" />
             <select id="pf_cp_cat">${catOptions}</select>
-          </div>
-          <div style="margin-top:8px;">
             <input id="pf_cp_desc" type="text" placeholder="Short description..." value="${escHtml(editing?.description ?? '')}" />
-          </div>
-          <div style="margin-top:8px;">
             <textarea id="pf_cp_body" placeholder="Checkpoint text...">${escHtml(editing?.body ?? '')}</textarea>
+            <div class="pf_inline_actions">
+              <button id="pf_cp_save" class="pf_smallbtn">${isNewCheckpoint ? 'Add' : 'Save'}</button>
+              <button id="pf_cp_cancel" class="pf_smallbtn">Cancel</button>
+            </div>
+            <div class="pf_help">
+              Tip: include enough context to restore the agent's state later.
+            </div>
           </div>
-          <div class="pf_inline_actions">
-            <button id="pf_cp_save" class="pf_smallbtn">${isNewCheckpoint ? 'Add' : 'Save'}</button>
-            <button id="pf_cp_cancel" class="pf_smallbtn">Cancel</button>
-          </div>
-          <div class="pf_help" style="margin-top:8px;">
-            Tip: include enough context to restore the agent's state later.
-          </div>
-        `}
-      `;
+        `;
 
-      elCheckpointEditor.innerHTML = `
-        <div class="pf_two">
-          <div>${checkpointListHtml}</div>
-          <div>${editorHtml}</div>
-        </div>
-      `;
+      elCheckpointEditor.innerHTML = editorHtml;
 
-      elCheckpointEditor.querySelectorAll('button[data-act]').forEach(b => {
+      elCheckpointList.querySelectorAll('button[data-act]').forEach(b => {
         b.addEventListener('click', async () => {
           const act = b.dataset.act;
           const id = b.dataset.id;
