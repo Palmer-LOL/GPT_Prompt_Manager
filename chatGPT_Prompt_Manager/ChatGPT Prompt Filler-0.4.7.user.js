@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Prompt Filler
 // @namespace    local.eric.promptfiller
-// @version      0.4.9
+// @version      5.0
 // @description  Local prompt library for ChatGPT: categories + add/edit/delete + checkpoints + import/export JSON + insert into composer.
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
@@ -554,7 +554,10 @@ Constraints:
       </header>
 
       <div id="pf_tab_use">
-        <input id="pf_search" type="text" placeholder="Filter prompts (title or text)..." />
+        <div class="pf_two">
+          <select id="pf_category_filter"></select>
+          <input id="pf_search" type="text" placeholder="Filter prompts (title or text)..." />
+        </div>
         <div id="pf_list" style="margin-top:10px;"></div>
       </div>
 
@@ -579,7 +582,6 @@ Constraints:
         <div class="pf_section">
           <div class="pf_group">Prompt tools</div>
           <div class="pf_action_grid">
-            <button id="pf_newprompt" class="pf_btn2">New prompt</button>
             <button id="pf_reset" class="pf_btn2" title="Clear all prompts/categories or restore sample library.">Reset library</button>
           </div>
 
@@ -608,6 +610,9 @@ Constraints:
       <div id="pf_tab_checkpoints" style="display:none;">
         <div class="pf_help">
           Save agent checkpoints for later reuse. Stored locally in Tampermonkey alongside your prompt library.
+        </div>
+        <div class="pf_two">
+          <select id="pf_checkpoint_filter"></select>
         </div>
         <div class="pf_section">
           <div class="pf_group">Checkpoint editor</div>
@@ -649,12 +654,15 @@ Constraints:
 
     // State (in closure so handlers can update)
     let activeTab = 'use';
+    let selectedCategoryId = 'all';
+    let selectedCheckpointCategoryId = 'all';
     let editingPromptId = null;
     let editingCheckpointId = null;
 
     // DOM refs
     const elClose = panel.querySelector('#pf_close');
     const elAutoSend = panel.querySelector('#pf_autosend');
+    const elCategoryFilter = panel.querySelector('#pf_category_filter');
     const elSearch = panel.querySelector('#pf_search');
     const elList = panel.querySelector('#pf_list');
     const elTabUse = panel.querySelector('#pf_tab_use');
@@ -666,7 +674,6 @@ Constraints:
     const elAddCat = panel.querySelector('#pf_addcat');
 
     const elEditor = panel.querySelector('#pf_editor');
-    const elNewPrompt = panel.querySelector('#pf_newprompt');
     const elReset = panel.querySelector('#pf_reset');
 
     const elExport = panel.querySelector('#pf_export');
@@ -676,6 +683,7 @@ Constraints:
     const elCheckpointCats = panel.querySelector('#pf_cp_cats');
     const elNewCheckpointCatName = panel.querySelector('#pf_newcp_cat_name');
     const elAddCheckpointCat = panel.querySelector('#pf_addcp_cat');
+    const elCheckpointFilter = panel.querySelector('#pf_checkpoint_filter');
 
     const elNewCheckpoint = panel.querySelector('#pf_newcheckpoint');
     const elCheckpointEditor = panel.querySelector('#pf_checkpoint_editor');
@@ -719,7 +727,16 @@ Constraints:
       });
     });
 
+    elCategoryFilter.addEventListener('change', () => {
+      selectedCategoryId = elCategoryFilter.value;
+      renderUseList(elSearch.value);
+    });
+
     elSearch.addEventListener('input', () => renderUseList(elSearch.value));
+    elCheckpointFilter.addEventListener('change', () => {
+      selectedCheckpointCategoryId = elCheckpointFilter.value;
+      renderCheckpoints();
+    });
 
     // ---- Category actions ----
     elAddCat.addEventListener('click', () => {
@@ -741,12 +758,6 @@ Constraints:
       saveLibrary(data);
       elNewCheckpointCatName.value = '';
       renderCheckpoints();
-    });
-
-    // ---- Prompt actions ----
-    elNewPrompt.addEventListener('click', () => {
-      editingPromptId = 'NEW';
-      renderEditor();
     });
 
     elReset.addEventListener('click', () => {
@@ -788,7 +799,7 @@ Constraints:
         meta: {
           exportedAt,
           schema: 'pf_library_v1',
-          scriptVersion: '0.4.9'
+          scriptVersion: '5.0'
         },
         data
       };
@@ -845,7 +856,7 @@ Constraints:
       // Save rollback snapshot (local storage)
       try {
         GM_setValue(KEY_BACKUP_LAST, JSON.stringify({
-          meta: { backedUpAt: getEstTimestamp(), schema: 'pf_library_v1', scriptVersion: '0.4.9' },
+          meta: { backedUpAt: getEstTimestamp(), schema: 'pf_library_v1', scriptVersion: '5.0' },
           data: current
         }));
       } catch { /* ignore */ }
@@ -872,7 +883,22 @@ Constraints:
       const cats = data.categories;
       const prompts = data.prompts;
 
+      if (!cats.some(c => c.id === selectedCategoryId)) {
+        selectedCategoryId = cats[0]?.id || 'all';
+      }
+
+      const categoryOptions = [
+        `<option value="all">All categories</option>`,
+        ...cats.map(c => `<option value="${escHtml(c.id)}">${escHtml(c.name)}</option>`)
+      ].join('');
+
+      elCategoryFilter.innerHTML = categoryOptions;
+      elCategoryFilter.value = selectedCategoryId;
+
       const html = cats.map(cat => {
+        if (selectedCategoryId !== 'all' && selectedCategoryId !== cat.id) {
+          return '';
+        }
         const catPrompts = prompts
           .filter(p => p.categoryId === cat.id)
           .filter(p => {
@@ -1135,16 +1161,17 @@ Constraints:
         return `<div class="pf_group">${escHtml(cat.name)}</div>${rows}`;
       }).join('');
 
-      const promptListHtml = promptsByCat || `<div class="pf_help">No prompts yet. Click “New prompt” above.</div>`;
+      const promptListHtml = promptsByCat || `<div class="pf_help">No prompts yet. Use the editor below to add one.</div>`;
 
       let editing = null;
       if (editingPromptId && editingPromptId !== 'NEW') {
         editing = data.prompts.find(p => p.id === editingPromptId) || null;
       }
 
+      const isNewPrompt = !editingPromptId || editingPromptId === 'NEW';
       const catOptions = data.categories.map((c, i) => {
         const selected =
-          (editingPromptId === 'NEW' && i === 0) ||
+          (isNewPrompt && i === 0) ||
           (editing && editing.categoryId === c.id);
         return `<option value="${escHtml(c.id)}" ${selected ? 'selected' : ''}>${escHtml(c.name)}</option>`;
       }).join('');
@@ -1161,7 +1188,7 @@ Constraints:
             <select id="pf_ed_cat">${catOptions}</select>
             <textarea id="pf_ed_body" placeholder="Prompt body...">${escHtml(editing?.body ?? '')}</textarea>
             <div class="pf_inline_actions">
-              <button id="pf_ed_save" class="pf_smallbtn">${editingPromptId === 'NEW' ? 'Add' : 'Save'}</button>
+              <button id="pf_ed_save" class="pf_smallbtn">${isNewPrompt ? 'Add' : 'Save'}</button>
               <button id="pf_ed_cancel" class="pf_smallbtn">Cancel</button>
             </div>
             <div class="pf_help">
@@ -1264,7 +1291,7 @@ Constraints:
               return;
             }
 
-            if (editingPromptId === 'NEW') {
+            if (!editingPromptId || editingPromptId === 'NEW') {
               data2.prompts.push({ id: uid('p'), categoryId, title, body });
               saveLibrary(data2);
               editingPromptId = null;
@@ -1302,7 +1329,23 @@ Constraints:
 
       renderCheckpointCategories();
 
+      const checkpointCats = data.checkpointCategories;
+      if (!checkpointCats.some(c => c.id === selectedCheckpointCategoryId)) {
+        selectedCheckpointCategoryId = checkpointCats[0]?.id || 'all';
+      }
+
+      const checkpointCategoryOptions = [
+        `<option value="all">All categories</option>`,
+        ...checkpointCats.map(c => `<option value="${escHtml(c.id)}">${escHtml(c.name)}</option>`)
+      ].join('');
+
+      elCheckpointFilter.innerHTML = checkpointCategoryOptions;
+      elCheckpointFilter.value = selectedCheckpointCategoryId;
+
       const checkpointsByCat = data.checkpointCategories.map(cat => {
+        if (selectedCheckpointCategoryId !== 'all' && selectedCheckpointCategoryId !== cat.id) {
+          return '';
+        }
         const list = data.checkpoints.filter(c => c.categoryId === cat.id);
         if (!list.length) return '';
 
