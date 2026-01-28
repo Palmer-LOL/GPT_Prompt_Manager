@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Prompt Filler
 // @namespace    local.eric.promptfiller
-// @version      0.4.7
+// @version      0.4.9
 // @description  Local prompt library for ChatGPT: categories + add/edit/delete + checkpoints + import/export JSON + insert into composer.
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
@@ -175,6 +175,20 @@ Constraints:
     el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
   }
 
+  function getComposerText(el) {
+    if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+      return el.value || '';
+    }
+    return el.textContent || '';
+  }
+
+  function appendComposerText(el, text) {
+    const existing = getComposerText(el);
+    const separator = existing && !existing.endsWith('\n') ? '\n\n' : '';
+    const combined = `${existing}${separator}${text}`;
+    setComposerText(el, combined);
+  }
+
   function getAutoSend() {
     try { return !!GM_getValue(KEY_AUTOSEND, false); } catch { return false; }
   }
@@ -210,6 +224,39 @@ Constraints:
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  async function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // fallback below
+      }
+    }
+
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    ta.style.pointerEvents = 'none';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }
+
+  async function flashButtonLabel(button, nextLabel, duration = 1200) {
+    if (!button) return;
+    const original = button.textContent;
+    button.textContent = nextLabel;
+    button.disabled = true;
+    await sleep(duration);
+    button.textContent = original;
+    button.disabled = false;
   }
 
   function validateLibraryShape(obj) {
@@ -367,7 +414,13 @@ Constraints:
       gap: 10px;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 10px;
+      margin: -12px -12px 10px;
+      padding: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: rgba(28, 28, 32, 0.98);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
     }
 
     .pf_tabs { display:flex; gap:8px; }
@@ -735,7 +788,7 @@ Constraints:
         meta: {
           exportedAt,
           schema: 'pf_library_v1',
-          scriptVersion: '0.4.7'
+          scriptVersion: '0.4.9'
         },
         data
       };
@@ -792,7 +845,7 @@ Constraints:
       // Save rollback snapshot (local storage)
       try {
         GM_setValue(KEY_BACKUP_LAST, JSON.stringify({
-          meta: { backedUpAt: getEstTimestamp(), schema: 'pf_library_v1', scriptVersion: '0.4.7' },
+          meta: { backedUpAt: getEstTimestamp(), schema: 'pf_library_v1', scriptVersion: '0.4.9' },
           data: current
         }));
       } catch { /* ignore */ }
@@ -833,6 +886,10 @@ Constraints:
           <div class="pf_item" data-prompt-id="${escHtml(p.id)}">
             <div class="pf_title">${escHtml(p.title)}</div>
             <div class="pf_body">${escHtml(p.body)}</div>
+            <div class="pf_inline_actions">
+              <button class="pf_smallbtn" data-act="p_insert" data-id="${escHtml(p.id)}">Insert</button>
+              <button class="pf_smallbtn" data-act="p_copy" data-id="${escHtml(p.id)}">Copy</button>
+            </div>
           </div>
         `).join('');
 
@@ -841,23 +898,54 @@ Constraints:
 
       elList.innerHTML = html || `<div class="pf_help">No prompts match your filter — or your library is empty. Switch to “Manage” to add some.</div>`;
 
+      async function handlePromptInsert(promptObj) {
+        const composer = findComposerElement();
+        if (!composer) {
+          alert('Could not find the ChatGPT message box. The UI may have changed.');
+          return;
+        }
+
+        appendComposerText(composer, promptObj.body);
+        await sleep(60);
+        await clickSendIfEnabled();
+        hidePanel();
+      }
+
       elList.querySelectorAll('.pf_item').forEach(node => {
-        node.addEventListener('click', async () => {
+        node.addEventListener('click', async (event) => {
+          const target = event.target;
+          if (target instanceof HTMLElement) {
+            const actionBtn = target.closest('button[data-act]');
+            if (actionBtn) {
+              event.preventDefault();
+              event.stopPropagation();
+              const pid = actionBtn.getAttribute('data-id');
+              const data2 = loadLibrary();
+              const promptObj = data2.prompts.find(p => p.id === pid);
+              if (!promptObj) return;
+
+              if (actionBtn.dataset.act === 'p_copy') {
+                const ok = await copyToClipboard(promptObj.body);
+                if (!ok) {
+                  alert('Copy failed. Please try again.');
+                  return;
+                }
+                await flashButtonLabel(actionBtn, 'Copied');
+                return;
+              }
+
+              if (actionBtn.dataset.act === 'p_insert') {
+                await handlePromptInsert(promptObj);
+                return;
+              }
+            }
+          }
+
           const pid = node.getAttribute('data-prompt-id');
           const data2 = loadLibrary();
           const promptObj = data2.prompts.find(p => p.id === pid);
           if (!promptObj) return;
-
-          const composer = findComposerElement();
-          if (!composer) {
-            alert('Could not find the ChatGPT message box. The UI may have changed.');
-            return;
-          }
-
-          setComposerText(composer, promptObj.body);
-          await sleep(60);
-          await clickSendIfEnabled();
-          hidePanel();
+          await handlePromptInsert(promptObj);
         });
       });
     }
@@ -1225,6 +1313,7 @@ Constraints:
             <div class="pf_meta">Saved: ${escHtml(new Date(c.savedAt).toLocaleString())}</div>
             <div class="pf_inline_actions">
               <button class="pf_smallbtn" data-act="cp_send" data-id="${escHtml(c.id)}">Send</button>
+              <button class="pf_smallbtn" data-act="cp_copy" data-id="${escHtml(c.id)}">Copy</button>
               <button class="pf_smallbtn" data-act="cp_up" data-id="${escHtml(c.id)}" ${idx === 0 ? 'disabled' : ''}>↑</button>
               <button class="pf_smallbtn" data-act="cp_down" data-id="${escHtml(c.id)}" ${idx === list.length - 1 ? 'disabled' : ''}>↓</button>
               <button class="pf_smallbtn" data-act="cp_edit" data-id="${escHtml(c.id)}">Edit</button>
@@ -1292,10 +1381,20 @@ Constraints:
               return;
             }
 
-            setComposerText(composer, c.body);
+            appendComposerText(composer, c.body);
             await sleep(60);
             await clickSendIfEnabled();
             hidePanel();
+            return;
+          }
+
+          if (act === 'cp_copy') {
+            const ok = await copyToClipboard(c.body);
+            if (!ok) {
+              alert('Copy failed. Please try again.');
+              return;
+            }
+            await flashButtonLabel(b, 'Copied');
             return;
           }
 
