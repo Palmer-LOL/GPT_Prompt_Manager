@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         ChatGPT Prompt Filler
-// @namespace    local.eric.promptfiller
-// @version      5.0
-// @description  Local prompt library for ChatGPT: categories + add/edit/delete + checkpoints + import/export JSON + insert into composer.
+// @name         GPT Prompt Manager
+// @namespace    local.promptmanager
+// @version      0.5.1
+// @description  Prompt Manager Userscript for ChatGPT Web Interface.
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
 // @grant        GM_addStyle
