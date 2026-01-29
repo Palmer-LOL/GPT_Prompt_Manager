@@ -540,9 +540,10 @@ Constraints:
     panel.innerHTML = `
       <header>
         <div class="pf_tabs">
-          <div class="pf_tab active" data-tab="use">Use</div>
-          <div class="pf_tab" data-tab="manage">Manage</div>
-          <div class="pf_tab" data-tab="checkpoints">Checkpoints</div>
+          <div class="pf_tab active" data-tab="insert">Insert</div>
+          <div class="pf_tab" data-tab="prompt-settings">Prompt Settings</div>
+          <div class="pf_tab" data-tab="checkpoint-settings">Checkpoint Settings</div>
+          <div class="pf_tab" data-tab="manager-settings">Manager Settings</div>
         </div>
         <div class="pf_row">
           <label class="pf_toggle" title="When enabled, selecting a prompt will send it immediately.">
@@ -553,15 +554,21 @@ Constraints:
         </div>
       </header>
 
-      <div id="pf_tab_use">
+      <div id="pf_tab_insert">
         <div class="pf_two">
+          <select id="pf_insert_type">
+            <option value="prompt">Prompt</option>
+            <option value="checkpoint">Checkpoint</option>
+          </select>
           <select id="pf_category_filter"></select>
-          <input id="pf_search" type="text" placeholder="Filter prompts (title or text)..." />
+        </div>
+        <div style="margin-top:8px;">
+          <input id="pf_search" type="text" placeholder="Filter (title or text)..." />
         </div>
         <div id="pf_list" style="margin-top:10px;"></div>
       </div>
 
-      <div id="pf_tab_manage" style="display:none;">
+      <div id="pf_tab_prompt_settings" style="display:none;">
         <div class="pf_help">
           Everything here is stored locally in Tampermonkey. No network calls, no sync, no surprises.
         </div>
@@ -580,20 +587,6 @@ Constraints:
         </div>
 
         <div class="pf_section">
-          <div class="pf_group">Prompt tools</div>
-          <div class="pf_action_grid">
-            <button id="pf_reset" class="pf_btn2" title="Clear all prompts/categories or restore sample library.">Reset library</button>
-          </div>
-
-          <div class="pf_action_grid" style="margin-top:8px;">
-            <button id="pf_export" class="pf_btn2" title="Download your library as JSON.">Export JSON</button>
-            <button id="pf_import" class="pf_btn2" title="Import a JSON library file (replaces current).">Import JSON</button>
-          </div>
-
-          <input id="pf_import_file" type="file" accept="application/json,.json" style="display:none;" />
-        </div>
-
-        <div class="pf_section">
           <div class="pf_manage_grid">
             <div>
               <div class="pf_group">Categories</div>
@@ -601,18 +594,18 @@ Constraints:
             </div>
             <div>
               <div class="pf_group">Prompts</div>
+              <div class="pf_stack" style="margin-top:8px;">
+                <select id="pf_prompt_order_category"></select>
+              </div>
               <div id="pf_prompt_list" style="margin-top:8px;"></div>
             </div>
           </div>
         </div>
       </div>
 
-      <div id="pf_tab_checkpoints" style="display:none;">
+      <div id="pf_tab_checkpoint_settings" style="display:none;">
         <div class="pf_help">
           Save agent checkpoints for later reuse. Stored locally in Tampermonkey alongside your prompt library.
-        </div>
-        <div class="pf_two">
-          <select id="pf_checkpoint_filter"></select>
         </div>
         <div class="pf_section">
           <div class="pf_group">Checkpoint editor</div>
@@ -647,27 +640,50 @@ Constraints:
           </div>
         </div>
       </div>
+
+      <div id="pf_tab_manager_settings" style="display:none;">
+        <div class="pf_help">
+          These tools manage your entire local library (prompts + checkpoints).
+        </div>
+        <div class="pf_section">
+          <div class="pf_group">Manager tools</div>
+          <div class="pf_action_grid">
+            <button id="pf_reset" class="pf_btn2" title="Clear all prompts/categories or restore sample library.">Reset library</button>
+          </div>
+
+          <div class="pf_action_grid" style="margin-top:8px;">
+            <button id="pf_export" class="pf_btn2" title="Download your library as JSON.">Export JSON</button>
+            <button id="pf_import" class="pf_btn2" title="Import a JSON library file (replaces current).">Import JSON</button>
+          </div>
+
+          <input id="pf_import_file" type="file" accept="application/json,.json" style="display:none;" />
+        </div>
+      </div>
     `;
 
     document.body.appendChild(btn);
     document.body.appendChild(panel);
 
     // State (in closure so handlers can update)
-    let activeTab = 'use';
-    let selectedCategoryId = 'all';
+    let activeTab = 'insert';
+    let insertType = 'prompt';
+    let selectedPromptCategoryId = 'all';
     let selectedCheckpointCategoryId = 'all';
+    let selectedPromptOrderCategoryId = 'all';
     let editingPromptId = null;
     let editingCheckpointId = null;
 
     // DOM refs
     const elClose = panel.querySelector('#pf_close');
     const elAutoSend = panel.querySelector('#pf_autosend');
+    const elInsertType = panel.querySelector('#pf_insert_type');
     const elCategoryFilter = panel.querySelector('#pf_category_filter');
     const elSearch = panel.querySelector('#pf_search');
     const elList = panel.querySelector('#pf_list');
-    const elTabUse = panel.querySelector('#pf_tab_use');
-    const elTabManage = panel.querySelector('#pf_tab_manage');
-    const elTabCheckpoints = panel.querySelector('#pf_tab_checkpoints');
+    const elTabInsert = panel.querySelector('#pf_tab_insert');
+    const elTabPromptSettings = panel.querySelector('#pf_tab_prompt_settings');
+    const elTabCheckpointSettings = panel.querySelector('#pf_tab_checkpoint_settings');
+    const elTabManagerSettings = panel.querySelector('#pf_tab_manager_settings');
 
     const elCats = panel.querySelector('#pf_cats');
     const elNewCatName = panel.querySelector('#pf_newcat_name');
@@ -683,21 +699,21 @@ Constraints:
     const elCheckpointCats = panel.querySelector('#pf_cp_cats');
     const elNewCheckpointCatName = panel.querySelector('#pf_newcp_cat_name');
     const elAddCheckpointCat = panel.querySelector('#pf_addcp_cat');
-    const elCheckpointFilter = panel.querySelector('#pf_checkpoint_filter');
 
     const elNewCheckpoint = panel.querySelector('#pf_newcheckpoint');
     const elCheckpointEditor = panel.querySelector('#pf_checkpoint_editor');
     const elPromptList = panel.querySelector('#pf_prompt_list');
     const elCheckpointList = panel.querySelector('#pf_checkpoint_list');
+    const elPromptOrderCategory = panel.querySelector('#pf_prompt_order_category');
 
     function showPanel() {
       panel.style.display = 'block';
       elAutoSend.checked = getAutoSend();
-      panel.classList.toggle('pf_manage', activeTab === 'manage' || activeTab === 'checkpoints');
+      panel.classList.toggle('pf_manage', activeTab !== 'insert');
       renderAll();
-      if (activeTab === 'use') elSearch.focus();
-      else if (activeTab === 'manage') elNewCatName.focus();
-      else elNewCheckpoint.focus();
+      if (activeTab === 'insert') elSearch.focus();
+      else if (activeTab === 'prompt-settings') elNewCatName.focus();
+      else if (activeTab === 'checkpoint-settings') elNewCheckpoint.focus();
     }
 
     function hidePanel() {
@@ -719,23 +735,34 @@ Constraints:
       tab.addEventListener('click', () => {
         activeTab = tab.dataset.tab;
         panel.querySelectorAll('.pf_tab').forEach(t => t.classList.toggle('active', t.dataset.tab === activeTab));
-        elTabUse.style.display = activeTab === 'use' ? 'block' : 'none';
-        elTabManage.style.display = activeTab === 'manage' ? 'block' : 'none';
-        elTabCheckpoints.style.display = activeTab === 'checkpoints' ? 'block' : 'none';
-        panel.classList.toggle('pf_manage', activeTab === 'manage' || activeTab === 'checkpoints');
+        elTabInsert.style.display = activeTab === 'insert' ? 'block' : 'none';
+        elTabPromptSettings.style.display = activeTab === 'prompt-settings' ? 'block' : 'none';
+        elTabCheckpointSettings.style.display = activeTab === 'checkpoint-settings' ? 'block' : 'none';
+        elTabManagerSettings.style.display = activeTab === 'manager-settings' ? 'block' : 'none';
+        panel.classList.toggle('pf_manage', activeTab !== 'insert');
         renderAll();
       });
     });
 
-    elCategoryFilter.addEventListener('change', () => {
-      selectedCategoryId = elCategoryFilter.value;
-      renderUseList(elSearch.value);
+    elInsertType.addEventListener('change', () => {
+      insertType = elInsertType.value;
+      renderInsertList(elSearch.value);
     });
 
-    elSearch.addEventListener('input', () => renderUseList(elSearch.value));
-    elCheckpointFilter.addEventListener('change', () => {
-      selectedCheckpointCategoryId = elCheckpointFilter.value;
-      renderCheckpoints();
+    elCategoryFilter.addEventListener('change', () => {
+      if (insertType === 'prompt') {
+        selectedPromptCategoryId = elCategoryFilter.value;
+      } else {
+        selectedCheckpointCategoryId = elCategoryFilter.value;
+      }
+      renderInsertList(elSearch.value);
+    });
+
+    elSearch.addEventListener('input', () => renderInsertList(elSearch.value));
+
+    elPromptOrderCategory.addEventListener('change', () => {
+      selectedPromptOrderCategoryId = elPromptOrderCategory.value;
+      renderEditor();
     });
 
     // ---- Category actions ----
@@ -746,7 +773,7 @@ Constraints:
       data.categories.push({ id: uid('cat'), name });
       saveLibrary(data);
       elNewCatName.value = '';
-      renderManage();
+      renderPromptSettings();
     });
 
     // ---- Checkpoint category actions ----
@@ -757,7 +784,7 @@ Constraints:
       data.checkpointCategories.push({ id: uid('cpcat'), name });
       saveLibrary(data);
       elNewCheckpointCatName.value = '';
-      renderCheckpoints();
+      renderCheckpointSettings();
     });
 
     elReset.addEventListener('click', () => {
@@ -775,7 +802,7 @@ Constraints:
         saveLibrary({ categories: [], prompts: [], checkpointCategories: [], checkpoints: [] });
         editingPromptId = null;
         editingCheckpointId = null;
-        renderManage();
+        renderPromptSettings();
         return;
       }
       if (upper === 'SAMPLE') {
@@ -785,7 +812,7 @@ Constraints:
         saveLibrary(seed);
         editingPromptId = null;
         editingCheckpointId = null;
-        renderManage();
+        renderPromptSettings();
       }
     });
 
@@ -869,22 +896,25 @@ Constraints:
 
     // ---- Renderers ----
     function renderAll() {
-      if (activeTab === 'use') renderUseList(elSearch.value);
-      else if (activeTab === 'manage') renderManage();
-      else renderCheckpoints();
+      if (activeTab === 'insert') renderInsertList(elSearch.value);
+      else if (activeTab === 'prompt-settings') renderPromptSettings();
+      else if (activeTab === 'checkpoint-settings') renderCheckpointSettings();
     }
 
-    function renderUseList(filterText) {
+    function renderInsertList(filterText) {
       const data = loadLibrary();
       normalizeLibrary(data);
 
       const f = (filterText || '').trim().toLowerCase();
 
-      const cats = data.categories;
-      const prompts = data.prompts;
+      const isPrompt = insertType === 'prompt';
+      const cats = isPrompt ? data.categories : data.checkpointCategories;
+      const items = isPrompt ? data.prompts : data.checkpoints;
+      const selectedCategoryId = isPrompt ? selectedPromptCategoryId : selectedCheckpointCategoryId;
 
       if (!cats.some(c => c.id === selectedCategoryId)) {
-        selectedCategoryId = cats[0]?.id || 'all';
+        if (isPrompt) selectedPromptCategoryId = cats[0]?.id || 'all';
+        else selectedCheckpointCategoryId = cats[0]?.id || 'all';
       }
 
       const categoryOptions = [
@@ -892,29 +922,35 @@ Constraints:
         ...cats.map(c => `<option value="${escHtml(c.id)}">${escHtml(c.name)}</option>`)
       ].join('');
 
+      elInsertType.value = insertType;
       elCategoryFilter.innerHTML = categoryOptions;
-      elCategoryFilter.value = selectedCategoryId;
+      elCategoryFilter.value = isPrompt ? selectedPromptCategoryId : selectedCheckpointCategoryId;
 
       const html = cats.map(cat => {
-        if (selectedCategoryId !== 'all' && selectedCategoryId !== cat.id) {
+        if ((isPrompt ? selectedPromptCategoryId : selectedCheckpointCategoryId) !== 'all' &&
+            (isPrompt ? selectedPromptCategoryId : selectedCheckpointCategoryId) !== cat.id) {
           return '';
         }
-        const catPrompts = prompts
-          .filter(p => p.categoryId === cat.id)
-          .filter(p => {
+
+        const catItems = items
+          .filter(item => item.categoryId === cat.id)
+          .filter(item => {
             if (!f) return true;
-            return p.title.toLowerCase().includes(f) || p.body.toLowerCase().includes(f);
+            const titleMatch = (item.title || '').toLowerCase().includes(f);
+            const bodyMatch = (item.body || '').toLowerCase().includes(f);
+            return titleMatch || bodyMatch;
           });
 
-        if (!catPrompts.length) return '';
+        if (!catItems.length) return '';
 
-        const itemsHtml = catPrompts.map(p => `
-          <div class="pf_item" data-prompt-id="${escHtml(p.id)}">
-            <div class="pf_title">${escHtml(p.title)}</div>
-            <div class="pf_body">${escHtml(p.body)}</div>
+        const itemsHtml = catItems.map(item => `
+          <div class="pf_item" data-item-id="${escHtml(item.id)}">
+            <div class="pf_title">${escHtml(item.title)}</div>
+            ${item.description ? `<div class="pf_help">${escHtml(item.description)}</div>` : ''}
+            <div class="pf_body">${escHtml(item.body)}</div>
             <div class="pf_inline_actions">
-              <button class="pf_smallbtn" data-act="p_insert" data-id="${escHtml(p.id)}">Insert</button>
-              <button class="pf_smallbtn" data-act="p_copy" data-id="${escHtml(p.id)}">Copy</button>
+              <button class="pf_smallbtn" data-act="item_insert" data-id="${escHtml(item.id)}">Insert</button>
+              <button class="pf_smallbtn" data-act="item_copy" data-id="${escHtml(item.id)}">Copy</button>
             </div>
           </div>
         `).join('');
@@ -922,16 +958,20 @@ Constraints:
         return `<div class="pf_group">${escHtml(cat.name)}</div>${itemsHtml}`;
       }).join('');
 
-      elList.innerHTML = html || `<div class="pf_help">No prompts match your filter — or your library is empty. Switch to “Manage” to add some.</div>`;
+      const emptyLabel = isPrompt
+        ? 'No prompts match your filter — or your library is empty. Switch to “Prompt Settings” to add some.'
+        : 'No checkpoints match your filter — or your library is empty. Switch to “Checkpoint Settings” to add some.';
 
-      async function handlePromptInsert(promptObj) {
+      elList.innerHTML = html || `<div class="pf_help">${emptyLabel}</div>`;
+
+      async function handleInsert(itemObj) {
         const composer = findComposerElement();
         if (!composer) {
           alert('Could not find the ChatGPT message box. The UI may have changed.');
           return;
         }
 
-        appendComposerText(composer, promptObj.body);
+        appendComposerText(composer, itemObj.body);
         await sleep(60);
         await clickSendIfEnabled();
         hidePanel();
@@ -945,13 +985,14 @@ Constraints:
             if (actionBtn) {
               event.preventDefault();
               event.stopPropagation();
-              const pid = actionBtn.getAttribute('data-id');
+              const itemId = actionBtn.getAttribute('data-id');
               const data2 = loadLibrary();
-              const promptObj = data2.prompts.find(p => p.id === pid);
-              if (!promptObj) return;
+              const pool = insertType === 'prompt' ? data2.prompts : data2.checkpoints;
+              const itemObj = pool.find(p => p.id === itemId);
+              if (!itemObj) return;
 
-              if (actionBtn.dataset.act === 'p_copy') {
-                const ok = await copyToClipboard(promptObj.body);
+              if (actionBtn.dataset.act === 'item_copy') {
+                const ok = await copyToClipboard(itemObj.body);
                 if (!ok) {
                   alert('Copy failed. Please try again.');
                   return;
@@ -960,23 +1001,24 @@ Constraints:
                 return;
               }
 
-              if (actionBtn.dataset.act === 'p_insert') {
-                await handlePromptInsert(promptObj);
+              if (actionBtn.dataset.act === 'item_insert') {
+                await handleInsert(itemObj);
                 return;
               }
             }
           }
 
-          const pid = node.getAttribute('data-prompt-id');
+          const itemId = node.getAttribute('data-item-id');
           const data2 = loadLibrary();
-          const promptObj = data2.prompts.find(p => p.id === pid);
-          if (!promptObj) return;
-          await handlePromptInsert(promptObj);
+          const pool = insertType === 'prompt' ? data2.prompts : data2.checkpoints;
+          const itemObj = pool.find(p => p.id === itemId);
+          if (!itemObj) return;
+          await handleInsert(itemObj);
         });
       });
     }
 
-    function renderManage() {
+    function renderPromptSettings() {
       const data = loadLibrary();
       normalizeLibrary(data);
       saveLibrary(data);
@@ -988,7 +1030,7 @@ Constraints:
     // ---- Checkpoint actions ----
     elNewCheckpoint.addEventListener('click', () => {
       editingCheckpointId = 'NEW';
-      renderCheckpoints();
+      renderCheckpointSettings();
     });
 
     function renderCategories() {
@@ -1059,7 +1101,7 @@ Constraints:
               if (!stillExists) editingPromptId = null;
             }
 
-            renderManage();
+            renderPromptSettings();
           }
         });
       });
@@ -1097,13 +1139,13 @@ Constraints:
           if (act === 'cp_cat_up' && idx > 0) {
             [data2.checkpointCategories[idx - 1], data2.checkpointCategories[idx]] = [data2.checkpointCategories[idx], data2.checkpointCategories[idx - 1]];
             saveLibrary(data2);
-            renderCheckpoints();
+            renderCheckpointSettings();
             return;
           }
           if (act === 'cp_cat_down' && idx < data2.checkpointCategories.length - 1) {
             [data2.checkpointCategories[idx + 1], data2.checkpointCategories[idx]] = [data2.checkpointCategories[idx], data2.checkpointCategories[idx + 1]];
             saveLibrary(data2);
-            renderCheckpoints();
+            renderCheckpointSettings();
             return;
           }
           if (act === 'cp_cat_rename') {
@@ -1111,7 +1153,7 @@ Constraints:
             if (!newName) return;
             data2.checkpointCategories[idx].name = newName.trim() || data2.checkpointCategories[idx].name;
             saveLibrary(data2);
-            renderCheckpoints();
+            renderCheckpointSettings();
             return;
           }
           if (act === 'cp_cat_delete') {
@@ -1132,7 +1174,7 @@ Constraints:
               if (!stillExists) editingCheckpointId = null;
             }
 
-            renderCheckpoints();
+            renderCheckpointSettings();
           }
         });
       });
@@ -1141,27 +1183,39 @@ Constraints:
     function renderEditor() {
       const data = loadLibrary();
 
-      const promptsByCat = data.categories.map(cat => {
-        const ps = data.prompts.filter(p => p.categoryId === cat.id);
-        if (!ps.length) return '';
+      const promptOrderCats = data.categories;
+      if (!promptOrderCats.some(c => c.id === selectedPromptOrderCategoryId)) {
+        selectedPromptOrderCategoryId = promptOrderCats[0]?.id || 'all';
+      }
 
-        const rows = ps.map((p, idx) => `
-          <div class="pf_item" style="cursor: default;">
-            <div class="pf_title">${escHtml(p.title)}</div>
-            <div class="pf_help">Category: ${escHtml(cat.name)}</div>
-            <div class="pf_inline_actions">
-              <button class="pf_smallbtn" data-act="p_up" data-id="${escHtml(p.id)}" ${idx === 0 ? 'disabled' : ''}>↑</button>
-              <button class="pf_smallbtn" data-act="p_down" data-id="${escHtml(p.id)}" ${idx === ps.length - 1 ? 'disabled' : ''}>↓</button>
-              <button class="pf_smallbtn" data-act="p_edit" data-id="${escHtml(p.id)}">Edit</button>
-              <button class="pf_smallbtn" data-act="p_delete" data-id="${escHtml(p.id)}">Delete</button>
+      elPromptOrderCategory.innerHTML = promptOrderCats.length
+        ? promptOrderCats.map(c => `<option value="${escHtml(c.id)}">${escHtml(c.name)}</option>`).join('')
+        : `<option value="all">No categories yet</option>`;
+      elPromptOrderCategory.disabled = promptOrderCats.length === 0;
+      if (promptOrderCats.length) elPromptOrderCategory.value = selectedPromptOrderCategoryId;
+
+      const activePromptCategory = promptOrderCats.find(c => c.id === selectedPromptOrderCategoryId);
+      const promptList = activePromptCategory
+        ? data.prompts.filter(p => p.categoryId === activePromptCategory.id)
+        : [];
+
+      const promptListHtml = promptList.length
+        ? `
+          <div class="pf_group">${escHtml(activePromptCategory.name)}</div>
+          ${promptList.map((p, idx) => `
+            <div class="pf_item" style="cursor: default;">
+              <div class="pf_title">${escHtml(p.title)}</div>
+              <div class="pf_help">Category: ${escHtml(activePromptCategory.name)}</div>
+              <div class="pf_inline_actions">
+                <button class="pf_smallbtn" data-act="p_up" data-id="${escHtml(p.id)}" ${idx === 0 ? 'disabled' : ''}>↑</button>
+                <button class="pf_smallbtn" data-act="p_down" data-id="${escHtml(p.id)}" ${idx === promptList.length - 1 ? 'disabled' : ''}>↓</button>
+                <button class="pf_smallbtn" data-act="p_edit" data-id="${escHtml(p.id)}">Edit</button>
+                <button class="pf_smallbtn" data-act="p_delete" data-id="${escHtml(p.id)}">Delete</button>
+              </div>
             </div>
-          </div>
-        `).join('');
-
-        return `<div class="pf_group">${escHtml(cat.name)}</div>${rows}`;
-      }).join('');
-
-      const promptListHtml = promptsByCat || `<div class="pf_help">No prompts yet. Use the editor below to add one.</div>`;
+          `).join('')}
+        `
+        : `<div class="pf_help">No prompts yet for this category. Use the editor below to add one.</div>`;
 
       let editing = null;
       if (editingPromptId && editingPromptId !== 'NEW') {
@@ -1322,30 +1376,14 @@ Constraints:
       }
     }
 
-    function renderCheckpoints() {
+    function renderCheckpointSettings() {
       const data = loadLibrary();
       normalizeLibrary(data);
       saveLibrary(data);
 
       renderCheckpointCategories();
 
-      const checkpointCats = data.checkpointCategories;
-      if (!checkpointCats.some(c => c.id === selectedCheckpointCategoryId)) {
-        selectedCheckpointCategoryId = checkpointCats[0]?.id || 'all';
-      }
-
-      const checkpointCategoryOptions = [
-        `<option value="all">All categories</option>`,
-        ...checkpointCats.map(c => `<option value="${escHtml(c.id)}">${escHtml(c.name)}</option>`)
-      ].join('');
-
-      elCheckpointFilter.innerHTML = checkpointCategoryOptions;
-      elCheckpointFilter.value = selectedCheckpointCategoryId;
-
       const checkpointsByCat = data.checkpointCategories.map(cat => {
-        if (selectedCheckpointCategoryId !== 'all' && selectedCheckpointCategoryId !== cat.id) {
-          return '';
-        }
         const list = data.checkpoints.filter(c => c.categoryId === cat.id);
         if (!list.length) return '';
 
@@ -1355,8 +1393,6 @@ Constraints:
             <div class="pf_help">${escHtml(c.description || '')}</div>
             <div class="pf_meta">Saved: ${escHtml(new Date(c.savedAt).toLocaleString())}</div>
             <div class="pf_inline_actions">
-              <button class="pf_smallbtn" data-act="cp_send" data-id="${escHtml(c.id)}">Send</button>
-              <button class="pf_smallbtn" data-act="cp_copy" data-id="${escHtml(c.id)}">Copy</button>
               <button class="pf_smallbtn" data-act="cp_up" data-id="${escHtml(c.id)}" ${idx === 0 ? 'disabled' : ''}>↑</button>
               <button class="pf_smallbtn" data-act="cp_down" data-id="${escHtml(c.id)}" ${idx === list.length - 1 ? 'disabled' : ''}>↓</button>
               <button class="pf_smallbtn" data-act="cp_edit" data-id="${escHtml(c.id)}">Edit</button>
@@ -1417,33 +1453,9 @@ Constraints:
 
           const c = data2.checkpoints[idx];
 
-          if (act === 'cp_send') {
-            const composer = findComposerElement();
-            if (!composer) {
-              alert('Could not find the ChatGPT message box. The UI may have changed.');
-              return;
-            }
-
-            appendComposerText(composer, c.body);
-            await sleep(60);
-            await clickSendIfEnabled();
-            hidePanel();
-            return;
-          }
-
-          if (act === 'cp_copy') {
-            const ok = await copyToClipboard(c.body);
-            if (!ok) {
-              alert('Copy failed. Please try again.');
-              return;
-            }
-            await flashButtonLabel(b, 'Copied');
-            return;
-          }
-
           if (act === 'cp_edit') {
             editingCheckpointId = id;
-            renderCheckpoints();
+            renderCheckpointSettings();
             return;
           }
 
@@ -1453,7 +1465,7 @@ Constraints:
             data2.checkpoints = data2.checkpoints.filter(x => x.id !== id);
             saveLibrary(data2);
             if (editingCheckpointId === id) editingCheckpointId = null;
-            renderCheckpoints();
+            renderCheckpointSettings();
             return;
           }
 
@@ -1468,7 +1480,7 @@ Constraints:
             const bIdx = sameCat[localPos].index;
             [data2.checkpoints[a], data2.checkpoints[bIdx]] = [data2.checkpoints[bIdx], data2.checkpoints[a]];
             saveLibrary(data2);
-            renderCheckpoints();
+            renderCheckpointSettings();
             return;
           }
 
@@ -1477,7 +1489,7 @@ Constraints:
             const cIdx = sameCat[localPos + 1].index;
             [data2.checkpoints[bIdx], data2.checkpoints[cIdx]] = [data2.checkpoints[cIdx], data2.checkpoints[bIdx]];
             saveLibrary(data2);
-            renderCheckpoints();
+            renderCheckpointSettings();
           }
         });
       });
@@ -1493,7 +1505,7 @@ Constraints:
             ev.preventDefault();
             ev.stopPropagation();
             editingCheckpointId = null;
-            renderCheckpoints();
+            renderCheckpointSettings();
             return;
           }
 
@@ -1523,7 +1535,7 @@ Constraints:
               data2.checkpoints.push({ id: uid('cp'), categoryId, title, description, body, savedAt });
               saveLibrary(data2);
               editingCheckpointId = null;
-              renderCheckpoints();
+              renderCheckpointSettings();
               return;
             }
 
@@ -1531,7 +1543,7 @@ Constraints:
             if (idx < 0) {
               alert('Could not find the checkpoint you were editing. It may have been deleted.');
               editingCheckpointId = null;
-              renderCheckpoints();
+              renderCheckpointSettings();
               return;
             }
 
@@ -1546,7 +1558,7 @@ Constraints:
 
             saveLibrary(data2);
             editingCheckpointId = null;
-            renderCheckpoints();
+            renderCheckpointSettings();
           }
         });
       }
