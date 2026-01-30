@@ -1,11 +1,11 @@
-# TamperMonkey ANONUSERSCRIPTS
+# GPT Prompt Manager
 
-This repository contains Tampermonkey userscripts and backups used for local workflow automation.
+TamperMonkey UserScript for managing ChatGPT prompts and checkpoints
 
 ## Contents
-- `chatGPT_Prompt_Manager/ChatGPT Prompt Filler-0.4.5.user.js`: Local prompt library manager for ChatGPT, including categories, prompts, and checkpoint storage.
-- `chatGPT_Prompt_Manager/chatgpt-prompts-*.json`: Exported prompt libraries.
-- `tampermonkey-backup-chrome-*.txt`: Browser export backups.
+* Local prompt library manager for ChatGPT, including categories, prompts, and checkpoint storage.
+* Exported prompt libraries.
+* Browser export backups.
 
 ## Usage
 1. Install the Tampermonkey browser extension.
@@ -13,5 +13,5 @@ This repository contains Tampermonkey userscripts and backups used for local wor
 3. Follow the in-script UI prompts to manage and use prompts/checkpoints.
 
 ## Notes
-- Data is stored locally in Tampermonkey; there is no sync or network communication unless a script explicitly adds it.
-- Exported JSON files are snapshots of your prompt library and can be re-imported.
+* Data is stored locally in Tampermonkey; there is no sync or network communication unless a script explicitly adds it.
+* Exported JSON files are snapshots of your prompt library and can be re-imported.
