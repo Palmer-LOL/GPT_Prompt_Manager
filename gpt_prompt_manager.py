@@ -175,29 +175,83 @@ class PromptManagerApp:
         self.selected_prompt_id: str | None = None
         self.selected_checkpoint_id: str | None = None
 
+        self._apply_dark_theme()
         self._build_ui()
         self.refresh_all()
 
+    def _apply_dark_theme(self) -> None:
+        colors = {
+            "bg": "#0b0b0b",
+            "panel": "#1a1a1a",
+            "field": "#101010",
+            "text": "#f1f1f1",
+            "muted": "#b0b0b0",
+            "accent": "#ff8c00",
+            "accent_active": "#ffad42",
+        }
+        self.root.configure(bg=colors["bg"])
+
+        style = ttk.Style(self.root)
+        if "clam" in style.theme_names():
+            style.theme_use("clam")
+
+        style.configure(".", background=colors["bg"], foreground=colors["text"])
+        style.configure("TFrame", background=colors["bg"])
+        style.configure("TLabel", background=colors["bg"], foreground=colors["text"])
+        style.configure("TButton", background=colors["panel"], foreground=colors["text"])
+        style.map(
+            "TButton",
+            background=[("active", colors["accent"]), ("pressed", colors["accent_active"])],
+            foreground=[("disabled", colors["muted"])],
+        )
+        style.configure("TEntry", fieldbackground=colors["field"], foreground=colors["text"])
+        style.configure("TNotebook", background=colors["bg"], borderwidth=0)
+        style.configure("TNotebook.Tab", background=colors["panel"], foreground=colors["text"], padding=(12, 6))
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", colors["accent"]), ("active", colors["panel"])],
+            foreground=[("selected", "#ffffff")],
+        )
+
+        # Apply defaults for classic tkinter widgets (Listbox/Text).
+        self.root.option_add("*Listbox.Background", colors["field"])
+        self.root.option_add("*Listbox.Foreground", colors["text"])
+        self.root.option_add("*Listbox.selectBackground", colors["accent"])
+        self.root.option_add("*Listbox.selectForeground", "#ffffff")
+        self.root.option_add("*Listbox.highlightBackground", colors["panel"])
+        self.root.option_add("*Listbox.highlightColor", colors["accent"])
+        self.root.option_add("*Text.Background", colors["field"])
+        self.root.option_add("*Text.Foreground", colors["text"])
+        self.root.option_add("*Text.insertBackground", colors["text"])
+        self.root.option_add("*Text.highlightBackground", colors["panel"])
+        self.root.option_add("*Text.highlightColor", colors["accent"])
+
     def load_library(self) -> dict[str, Any]:
         if not self.paths.library_path.exists():
-            seeded = copy.deepcopy(SAMPLE_LIBRARY)
-            self.save_library(seeded)
-            return seeded
+            return self._extracted_from_load_library_3()
         try:
-            parsed = json.loads(self.paths.library_path.read_text(encoding="utf-8"))
-            ok, err = validate_library_shape(parsed)
-            if not ok:
-                raise ValueError(err)
-            if "checkpointCategories" not in parsed:
-                parsed["checkpointCategories"] = copy.deepcopy(parsed["categories"])
-            if "checkpoints" not in parsed:
-                parsed["checkpoints"] = []
-            return parsed
+            return self._extracted_from_load_library_7()
         except Exception as exc:
             messagebox.showwarning("Invalid library", f"Could not parse existing library file.\n\n{exc}\n\nUsing sample seed.")
-            seeded = copy.deepcopy(SAMPLE_LIBRARY)
-            self.save_library(seeded)
-            return seeded
+            return self._extracted_from_load_library_3()
+
+    # TODO Rename this here and in `load_library`
+    def _extracted_from_load_library_7(self):
+        parsed = json.loads(self.paths.library_path.read_text(encoding="utf-8"))
+        ok, err = validate_library_shape(parsed)
+        if not ok:
+            raise ValueError(err)
+        if "checkpointCategories" not in parsed:
+            parsed["checkpointCategories"] = copy.deepcopy(parsed["categories"])
+        if "checkpoints" not in parsed:
+            parsed["checkpoints"] = []
+        return parsed
+
+    # TODO Rename this here and in `load_library`
+    def _extracted_from_load_library_3(self):
+        seeded = copy.deepcopy(SAMPLE_LIBRARY)
+        self.save_library(seeded)
+        return seeded
 
     def save_library(self, data: dict[str, Any] | None = None) -> None:
         payload = data if data is not None else self.library
@@ -294,16 +348,22 @@ class PromptManagerApp:
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         ttk.Label(right, text="Title").pack(anchor="w")
-        self.checkpoint_title = tk.StringVar()
-        ttk.Entry(right, textvariable=self.checkpoint_title).pack(fill=tk.X)
-
-        ttk.Label(right, text="Description", padding=(0, 8, 0, 0)).pack(anchor="w")
-        self.checkpoint_desc = tk.StringVar()
-        ttk.Entry(right, textvariable=self.checkpoint_desc).pack(fill=tk.X)
-
-        ttk.Label(right, text="Body", padding=(0, 8, 0, 0)).pack(anchor="w")
+        self.checkpoint_title = self._extracted_from__build_checkpoint_tab_32(
+            right, "Description"
+        )
+        self.checkpoint_desc = self._extracted_from__build_checkpoint_tab_32(
+            right, "Body"
+        )
         self.checkpoint_body = tk.Text(right, wrap=tk.WORD)
         self.checkpoint_body.pack(fill=tk.BOTH, expand=True)
+
+    # TODO Rename this here and in `_build_checkpoint_tab`
+    def _extracted_from__build_checkpoint_tab_32(self, right, text):
+        result = tk.StringVar()
+        ttk.Entry(right, textvariable=result).pack(fill=tk.X)
+
+        ttk.Label(right, text=text, padding=(0, 8, 0, 0)).pack(anchor="w")
+        return result
 
     def _selected_category_id(self, kind: str) -> str | None:
         categories = self.library["categories"] if kind == "prompt" else self.library["checkpointCategories"]
@@ -469,27 +529,51 @@ class PromptManagerApp:
     def copy_prompt_body(self) -> None:
         if not self.selected_prompt_id:
             return
-        item = next((p for p in self.library["prompts"] if p["id"] == self.selected_prompt_id), None)
-        if item:
+        if item := next(
+            (
+                p
+                for p in self.library["prompts"]
+                if p["id"] == self.selected_prompt_id
+            ),
+            None,
+        ):
             self._copy_text(item["body"])
 
     def copy_checkpoint_body(self) -> None:
         if not self.selected_checkpoint_id:
             return
-        item = next((c for c in self.library["checkpoints"] if c["id"] == self.selected_checkpoint_id), None)
-        if item:
+        if item := next(
+            (
+                c
+                for c in self.library["checkpoints"]
+                if c["id"] == self.selected_checkpoint_id
+            ),
+            None,
+        ):
             self._copy_text(item["body"])
 
     def save_current(self) -> None:
         if self.selected_prompt_id:
-            item = next((p for p in self.library["prompts"] if p["id"] == self.selected_prompt_id), None)
-            if item:
+            if item := next(
+                (
+                    p
+                    for p in self.library["prompts"]
+                    if p["id"] == self.selected_prompt_id
+                ),
+                None,
+            ):
                 item["title"] = self.prompt_title.get().strip() or item["title"]
                 item["body"] = self.prompt_body.get("1.0", tk.END).rstrip("\n")
 
         if self.selected_checkpoint_id:
-            item = next((c for c in self.library["checkpoints"] if c["id"] == self.selected_checkpoint_id), None)
-            if item:
+            if item := next(
+                (
+                    c
+                    for c in self.library["checkpoints"]
+                    if c["id"] == self.selected_checkpoint_id
+                ),
+                None,
+            ):
                 item["title"] = self.checkpoint_title.get().strip() or item["title"]
                 item["description"] = self.checkpoint_desc.get().strip()
                 item["body"] = self.checkpoint_body.get("1.0", tk.END).rstrip("\n")
@@ -508,7 +592,11 @@ class PromptManagerApp:
         path = filedialog.askopenfilename(filetypes=[("JSON", "*.json"), ("All files", "*")])
         if not path:
             return
-        parsed = json.loads(Path(path).read_text(encoding="utf-8"))
+        try:
+            parsed = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            messagebox.showerror("Import failed", f"Could not parse file:\n{exc}")
+            return
         candidate = parsed["data"] if isinstance(parsed, dict) and "data" in parsed else parsed
         ok, err = validate_library_shape(candidate)
         if not ok:
