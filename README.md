@@ -1,17 +1,46 @@
 # GPT Prompt Manager
 
-TamperMonkey UserScript for managing ChatGPT prompts and checkpoints
+A standalone desktop rewrite of the original Tampermonkey userscript, built with Python + Tkinter for Linux desktops.
 
-## Contents
-* Local prompt library manager for ChatGPT, including categories, prompts, and checkpoint storage.
-* Exported prompt libraries.
-* Browser export backups.
+## What it does
 
-## Usage
-1. Install the Tampermonkey browser extension.
-2. Open a `.user.js` file in this repo and install it in Tampermonkey.
-3. Follow the in-script UI prompts to manage and use prompts/checkpoints.
+- Manages prompt categories and prompt entries.
+- Manages checkpoint categories and checkpoint entries.
+- Saves data locally as JSON in:
+  - `~/.local/share/gpt_prompt_manager/library.json` (or `$XDG_DATA_HOME/gpt_prompt_manager/library.json`)
+- Imports and exports JSON libraries compatible with the userscript data shape.
+- Copies prompt/checkpoint bodies to clipboard.
 
-## Notes
-* Data is stored locally in Tampermonkey; there is no sync or network communication unless a script explicitly adds it.
-* Exported JSON files are snapshots of your prompt library and can be re-imported.
+## Run (Linux)
+
+```bash
+python3 gpt_prompt_manager.py
+```
+
+## Make it executable
+
+```bash
+chmod +x gpt_prompt_manager.py
+./gpt_prompt_manager.py
+```
+
+## Build a single-file executable (optional)
+
+If you want a self-contained executable:
+
+```bash
+python3 -m pip install pyinstaller
+pyinstaller --onefile --noconsole gpt_prompt_manager.py
+```
+
+Then run:
+
+```bash
+./dist/gpt_prompt_manager
+```
+
+## Legacy script
+
+The original browser userscript is still present in this repo as:
+
+- `GPT_Prompt_Manager.user.js`
