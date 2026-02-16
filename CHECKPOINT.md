@@ -1,44 +1,48 @@
 Conversation Checkpoint
 
 1) Synopsis (1 paragraph)
-The user reported that the prior implementation (dynamic `import()` from `esm.sh`) does not work reliably in Tampermonkey and requested a static vendored approach instead. The userscript was updated to remove runtime `import()` usage, embed js-tiktoken tokenizer logic and `o200k_base` rank data directly in `GPT_Prompt_Manager.user.js`, preserve the existing token UI behavior (Insert totals and live editor counts), and add a third-party MIT notice for the vendored js-tiktoken code.
+The user reported that the previous token implementation was too heavy because it calculated all visible prompts at once, and requested an on-demand per-item workflow with persistence. The userscript was updated so token counting on the Insert tab is now manual via a per-item “Calc tokens” button, the calculated token count is stored on that prompt/checkpoint record for later reuse, cached totals are shown in the Insert summary, and token values are visually marked inline on each card.
 
 2) Key facts & decisions (bullets)
-- Replaced dynamic js-tiktoken loading with a vendored in-file tokenizer implementation pinned to `js-tiktoken@1.0.21` and `o200k_base`.
-- Kept existing token-count UI features intact (per-item token badges, Insert aggregate totals, prompt/checkpoint editor live counts).
-- Added explicit third-party licensing documentation (`THIRD_PARTY_NOTICES.md`) with MIT text for js-tiktoken.
-- Bumped userscript version from `0.6.0` to `0.6.1`.
+- Removed eager per-render token counting across all visible Insert items.
+- Added per-item `Calc tokens` action in Insert cards.
+- Persisted token metadata on items: `tokenCount`, `tokenEncoding`, `tokenCountUpdatedAt`.
+- Insert summary now reports cached totals and how many items are still uncalculated.
+- Existing visual token display is now explicit per card (`🧮 Tokens...`) and uses cached values.
+- Reset token metadata to null when prompt/checkpoint body is saved/edited to avoid stale counts.
+- Bumped userscript version to `0.6.2`.
 
 3) Open threads / unresolved questions (bullets)
-- Confirm whether token counts should remain body-only or include title/description fields.
-- Confirm whether the larger userscript size from vendored rank data is acceptable long-term.
+- Confirm whether user wants a bulk “calculate all in category/filter” utility in addition to per-item mode.
+- Confirm whether token metadata should be included in exported schema docs/user-facing README notes.
 
 4) User intent & success criteria (bullets; mark inferred as **Inferred**)
-- Replace non-working runtime js-tiktoken import flow with a static embedded approach compatible with Tampermonkey.
-- Continue using `o200k_base` token counting.
-- Preserve Insert-tab total token visibility and editor token visibility.
-- Ensure MIT licensing obligations are satisfied for vendored code.
+- Avoid expensive all-at-once token computation in the browser tab.
+- Trigger token counting per prompt/checkpoint on demand.
+- Persist computed counts with each item for future visibility.
+- Provide clear on-card token visibility in the prompt display.
 
 5) Assumptions & risks (bullets; mark inferred as **Inferred**)
-- **Inferred**: Tampermonkey runtime supports `atob`, `TextEncoder`, `TextDecoder`, and unicode regex flags required by tokenizer logic.
-- Vendoring `o200k_base` significantly increases userscript size, which may affect editor responsiveness or install/update UX.
-- **Inferred**: The current implementation should avoid network dependency during token counting once installed.
+- **Inferred**: Manual per-item counting is preferred over automatic freshness when content changes.
+- Token metadata can become stale after edits, so saves now explicitly reset cached values.
+- **Inferred**: Additional stored fields are acceptable in library JSON even if not required by validation.
 
 6) Tone / mood read (1–3 bullets; **Inferred**)
-- **Inferred**: Direct and corrective (fix what did not work in production usage).
-- **Inferred**: Pragmatic about tradeoffs (explicitly okay with MIT licensing overhead).
+- **Inferred**: Frustrated with performance overhead from prior implementation.
+- **Inferred**: Wants pragmatic UX that remains responsive and explicit.
 
 7) Next actions (numbered list, 3–7 items)
-1. Validate in Tampermonkey that token counts initialize without remote imports.
-2. Verify token outputs against known sample strings for regression confidence.
-3. Confirm whether to optimize/collapse vendored data footprint in future revisions.
-4. Gather user feedback on whether additional token displays are needed beyond current locations.
+1. Validate in Tampermonkey that per-item token calc and caching behave as expected.
+2. Confirm card display wording/icons are to user preference.
+3. Optionally add a deliberate batch-calc action with explicit user trigger (not automatic).
+4. Update README/export notes if token metadata visibility needs documentation.
 
 8) Last 10 messages (best-effort recap, chronological, label speakers)
-- User: Re-shared AGENTS instructions and environment context.
-- User: Reported dissatisfaction with prior codex PR outcome.
-- User: Requested addressing prior comments and asked to statically vendor `js-tiktoken`/`o200k_base` into userscript, including MIT licensing.
-- Assistant: Read current checkpoint and repository history.
-- Assistant: Replaced dynamic tokenizer import strategy with vendored static tokenizer/rank data and updated version.
-- Assistant: Added `THIRD_PARTY_NOTICES.md` with MIT attribution text.
-- Assistant: Ran syntax checks and attempted screenshot capture (browser tool failed due environment crash).
+- User: Re-shared AGENTS instructions and context.
+- User: Reported dissatisfaction with prior codex output and included prior diff summary.
+- User: Requested changing behavior to per-prompt calculation with persistence and visible token display.
+- Assistant: Reviewed checkpoint/history and inspected token-render code paths.
+- Assistant: Replaced eager Insert token computation with on-demand per-item calculation + caching.
+- Assistant: Added cached total summary messaging and visual per-card token indicator.
+- Assistant: Added cache invalidation on prompt/checkpoint save edits.
+- Assistant: Ran syntax check.

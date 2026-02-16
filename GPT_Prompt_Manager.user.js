@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GPT Prompt Manager
 // @namespace    local.promptmanager
-// @version      0.6.1
+// @version      0.6.2
 // @description  Prompt Manager Userscript for ChatGPT Web Interface.
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
@@ -787,7 +787,6 @@
     const elPromptList = panel.querySelector('#pf_prompt_list');
     const elCheckpointList = panel.querySelector('#pf_checkpoint_list');
     const elPromptOrderCategory = panel.querySelector('#pf_prompt_order_category');
-    let tokenRenderVersion = 0;
 
     function showPanel() {
       panel.style.display = 'block';
@@ -1034,10 +1033,11 @@
             <div class="pf_title">${escHtml(item.title)}</div>
             ${item.description ? `<div class="pf_help">${escHtml(item.description)}</div>` : ''}
             <div class="pf_body">${escHtml(item.body)}</div>
-            <div class="pf_meta">Tokens (o200k_base): <span class="pf_token_count" data-item-id="${escHtml(item.id)}">...</span></div>
+            <div class="pf_meta">🧮 Tokens (o200k_base): ${Number.isFinite(item.tokenCount) ? `<strong>${item.tokenCount}</strong>` : '<em>not calculated</em>'}</div>
             <div class="pf_inline_actions">
             <button class="pf_smallbtn" data-act="item_insert" data-id="${escHtml(item.id)}">Insert</button>
             <button class="pf_smallbtn" data-act="item_copy" data-id="${escHtml(item.id)}">Copy</button>
+            <button class="pf_smallbtn" data-act="item_calc_tokens" data-id="${escHtml(item.id)}">Calc tokens</button>
             </div>
             </div>
             `).join('');
@@ -1050,12 +1050,7 @@
         : 'No checkpoints match your filter — or your library is empty. Switch to “Checkpoint Settings” to add some.';
 
         elList.innerHTML = html || `<div class="pf_help">${emptyLabel}</div>`;
-        elInsertTokenTotal.textContent = visibleItems.length
-          ? 'Tokens (o200k_base): calculating...'
-          : 'Tokens (o200k_base): 0 across 0 items';
-
-        const currentTokenRenderVersion = ++tokenRenderVersion;
-        updateInsertTokenCounts(visibleItems, currentTokenRenderVersion);
+        updateInsertTokenSummary(visibleItems);
 
         async function handleInsert(itemObj) {
           const composer = findComposerElement();
@@ -1098,6 +1093,26 @@
                   await handleInsert(itemObj);
                   return;
                 }
+
+                if (actionBtn.dataset.act === 'item_calc_tokens') {
+                  actionBtn.disabled = true;
+                  actionBtn.textContent = 'Calculating...';
+
+                  const count = await countO200kTokens(itemObj.body || '');
+                  if (count === null) {
+                    alert('Could not calculate tokens right now.');
+                    actionBtn.disabled = false;
+                    actionBtn.textContent = 'Calc tokens';
+                    return;
+                  }
+
+                  itemObj.tokenCount = count;
+                  itemObj.tokenEncoding = 'o200k_base';
+                  itemObj.tokenCountUpdatedAt = new Date().toISOString();
+                  saveLibrary(data2);
+                  renderInsertList(elSearch.value);
+                  return;
+                }
               }
             }
 
@@ -1111,35 +1126,18 @@
         });
       }
 
-      async function updateInsertTokenCounts(visibleItems, renderVersion) {
-        if (!visibleItems.length) return;
-
-        const lookup = new Map(visibleItems.map(item => [item.id, item]));
-        const tokenSpans = Array.from(elList.querySelectorAll('.pf_token_count'));
-        if (!tokenSpans.length) return;
-
-        const tokenizer = await getO200kTokenizer();
-        if (renderVersion !== tokenRenderVersion) return;
-
-        if (!tokenizer) {
-          tokenSpans.forEach(span => { span.textContent = 'n/a'; });
-          elInsertTokenTotal.textContent = 'Tokens (o200k_base): unavailable (tokenizer failed to load)';
+      function updateInsertTokenSummary(visibleItems) {
+        if (!visibleItems.length) {
+          elInsertTokenTotal.textContent = 'Tokens (o200k_base): 0 across 0 items';
           return;
         }
 
-        let total = 0;
-        tokenSpans.forEach((span) => {
-          const item = lookup.get(span.getAttribute('data-item-id'));
-          if (!item) {
-            span.textContent = '--';
-            return;
-          }
-          const count = tokenizer.count(item.body || '');
-          total += count;
-          span.textContent = String(count);
-        });
-
-        elInsertTokenTotal.textContent = `Tokens (o200k_base): ${total} across ${visibleItems.length} item(s)`;
+        const withCounts = visibleItems.filter(item => Number.isFinite(item.tokenCount));
+        const total = withCounts.reduce((sum, item) => sum + item.tokenCount, 0);
+        const missing = visibleItems.length - withCounts.length;
+        elInsertTokenTotal.textContent = missing
+          ? `Tokens (o200k_base): ${total} cached across ${withCounts.length}/${visibleItems.length} item(s) • ${missing} not calculated`
+          : `Tokens (o200k_base): ${total} cached across ${visibleItems.length} item(s)`;
       }
 
       function renderPromptSettings() {
@@ -1472,7 +1470,7 @@
                 }
 
                 if (!editingPromptId || editingPromptId === 'NEW') {
-                  data2.prompts.push({ id: uid('p'), categoryId, title, body });
+                  data2.prompts.push({ id: uid('p'), categoryId, title, body, tokenCount: null, tokenEncoding: 'o200k_base', tokenCountUpdatedAt: null });
                   saveLibrary(data2);
                   editingPromptId = null;
                   renderEditor();
@@ -1491,7 +1489,10 @@
                   ...data2.prompts[idx],
                   title,
                   body,
-                  categoryId
+                  categoryId,
+                  tokenCount: null,
+                  tokenEncoding: 'o200k_base',
+                  tokenCountUpdatedAt: null
                 };
 
                 saveLibrary(data2);
@@ -1660,7 +1661,7 @@
               const savedAt = new Date().toISOString();
 
               if (!editingCheckpointId || editingCheckpointId === 'NEW') {
-                data2.checkpoints.push({ id: uid('cp'), categoryId, title, description, body, savedAt });
+                data2.checkpoints.push({ id: uid('cp'), categoryId, title, description, body, savedAt, tokenCount: null, tokenEncoding: 'o200k_base', tokenCountUpdatedAt: null });
                 saveLibrary(data2);
                 editingCheckpointId = null;
                 renderCheckpointSettings();
@@ -1681,7 +1682,10 @@
                 description,
                 body,
                 categoryId,
-                savedAt
+                savedAt,
+                tokenCount: null,
+                tokenEncoding: 'o200k_base',
+                tokenCountUpdatedAt: null
               };
 
               saveLibrary(data2);
