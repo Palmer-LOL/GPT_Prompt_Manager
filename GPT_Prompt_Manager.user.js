@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GPT Prompt Manager
 // @namespace    local.promptmanager
-// @version      0.5.1
+// @version      0.6.0
 // @description  Prompt Manager Userscript for ChatGPT Web Interface.
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
@@ -95,6 +95,41 @@
   // Helpers
   // -----------------------------
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const TOKENIZER_ENCODING = 'o200k_base';
+
+  let tokenEncoder = null;
+  let tokenEncoderPromise = null;
+
+  async function ensureTokenEncoder() {
+    if (tokenEncoder) return tokenEncoder;
+    if (tokenEncoderPromise) return tokenEncoderPromise;
+
+    tokenEncoderPromise = (async () => {
+      const [{ Tiktoken }, { default: o200kBase }] = await Promise.all([
+        import('https://esm.sh/js-tiktoken@1.0.21/lite?bundle'),
+        import('https://esm.sh/js-tiktoken@1.0.21/ranks/o200k_base?bundle')
+      ]);
+
+      tokenEncoder = new Tiktoken(o200kBase);
+      return tokenEncoder;
+    })().catch((err) => {
+      tokenEncoderPromise = null;
+      console.warn('[GPT Prompt Manager] Failed to load js-tiktoken encoder:', err);
+      return null;
+    });
+
+    return tokenEncoderPromise;
+  }
+
+  function getTokenCount(text) {
+    if (!tokenEncoder) return null;
+    return tokenEncoder.encode(text || '').length;
+  }
+
+  function formatTokenCount(count) {
+    if (typeof count !== 'number' || Number.isNaN(count)) return 'Loading…';
+    return count.toLocaleString();
+  }
 
   function uid(prefix = 'id') {
     return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
@@ -565,6 +600,7 @@
     <div style="margin-top:8px;">
     <input id="pf_search" type="text" placeholder="Filter (title or text)..." />
     </div>
+    <div id="pf_insert_token_summary" class="pf_meta" style="margin-top:8px;"></div>
     <div id="pf_list" style="margin-top:10px;"></div>
     </div>
 
@@ -672,6 +708,7 @@
     let selectedPromptOrderCategoryId = 'all';
     let editingPromptId = null;
     let editingCheckpointId = null;
+    let tokenRefreshPending = false;
 
     // DOM refs
     const elClose = panel.querySelector('#pf_close');
@@ -679,6 +716,7 @@
     const elInsertType = panel.querySelector('#pf_insert_type');
     const elCategoryFilter = panel.querySelector('#pf_category_filter');
     const elSearch = panel.querySelector('#pf_search');
+    const elInsertTokenSummary = panel.querySelector('#pf_insert_token_summary');
     const elList = panel.querySelector('#pf_list');
     const elTabInsert = panel.querySelector('#pf_tab_insert');
     const elTabPromptSettings = panel.querySelector('#pf_tab_prompt_settings');
@@ -894,6 +932,16 @@
         renderAll();
       });
 
+      function requestTokenRefresh() {
+        if (tokenEncoder || tokenRefreshPending) return;
+        tokenRefreshPending = true;
+
+        ensureTokenEncoder().finally(() => {
+          tokenRefreshPending = false;
+          if (panel.style.display !== 'none') renderAll();
+        });
+      }
+
       // ---- Renderers ----
       function renderAll() {
         if (activeTab === 'insert') renderInsertList(elSearch.value);
@@ -926,6 +974,7 @@
         elCategoryFilter.innerHTML = categoryOptions;
         elCategoryFilter.value = isPrompt ? selectedPromptCategoryId : selectedCheckpointCategoryId;
 
+        const visibleItems = [];
         const html = cats.map(cat => {
           if ((isPrompt ? selectedPromptCategoryId : selectedCheckpointCategoryId) !== 'all' &&
             (isPrompt ? selectedPromptCategoryId : selectedCheckpointCategoryId) !== cat.id) {
@@ -942,18 +991,23 @@
             });
 
             if (!catItems.length) return '';
+            visibleItems.push(...catItems);
 
-            const itemsHtml = catItems.map(item => `
+            const itemsHtml = catItems.map(item => {
+              const tokenCount = getTokenCount(item.body);
+              return `
             <div class="pf_item" data-item-id="${escHtml(item.id)}">
             <div class="pf_title">${escHtml(item.title)}</div>
             ${item.description ? `<div class="pf_help">${escHtml(item.description)}</div>` : ''}
+            <div class="pf_meta">Tokens (${TOKENIZER_ENCODING}): ${formatTokenCount(tokenCount)}</div>
             <div class="pf_body">${escHtml(item.body)}</div>
             <div class="pf_inline_actions">
             <button class="pf_smallbtn" data-act="item_insert" data-id="${escHtml(item.id)}">Insert</button>
             <button class="pf_smallbtn" data-act="item_copy" data-id="${escHtml(item.id)}">Copy</button>
             </div>
             </div>
-            `).join('');
+            `;
+            }).join('');
 
             return `<div class="pf_group">${escHtml(cat.name)}</div>${itemsHtml}`;
         }).join('');
@@ -961,6 +1015,14 @@
         const emptyLabel = isPrompt
         ? 'No prompts match your filter — or your library is empty. Switch to “Prompt Settings” to add some.'
         : 'No checkpoints match your filter — or your library is empty. Switch to “Checkpoint Settings” to add some.';
+
+        if (tokenEncoder) {
+          const visibleTokenTotal = visibleItems.reduce((sum, item) => sum + getTokenCount(item.body), 0);
+          elInsertTokenSummary.textContent = `Visible ${isPrompt ? 'prompts' : 'checkpoints'}: ${visibleItems.length} · Total tokens (${TOKENIZER_ENCODING}): ${visibleTokenTotal.toLocaleString()}`;
+        } else {
+          elInsertTokenSummary.textContent = `Visible ${isPrompt ? 'prompts' : 'checkpoints'}: ${visibleItems.length} · Total tokens (${TOKENIZER_ENCODING}): Loading…`;
+          requestTokenRefresh();
+        }
 
         elList.innerHTML = html || `<div class="pf_help">${emptyLabel}</div>`;
 
@@ -1241,6 +1303,7 @@
           <input id="pf_ed_title" type="text" placeholder="Prompt title..." value="${escHtml(editing?.title ?? '')}" />
           <select id="pf_ed_cat">${catOptions}</select>
           <textarea id="pf_ed_body" placeholder="Prompt body...">${escHtml(editing?.body ?? '')}</textarea>
+          <div id="pf_ed_token_count" class="pf_meta">Tokens (${TOKENIZER_ENCODING}): Loading…</div>
           <div class="pf_inline_actions">
           <button id="pf_ed_save" class="pf_smallbtn">${isNewPrompt ? 'Add' : 'Save'}</button>
           <button id="pf_ed_cancel" class="pf_smallbtn">Cancel</button>
@@ -1252,6 +1315,22 @@
           `;
 
           elEditor.innerHTML = editorHtml;
+
+          const updatePromptEditorTokenCount = () => {
+            const counter = elEditor.querySelector('#pf_ed_token_count');
+            const bodyField = elEditor.querySelector('#pf_ed_body');
+            if (!counter || !bodyField) return;
+
+            const tokenCount = getTokenCount(bodyField.value || '');
+            counter.textContent = `Tokens (${TOKENIZER_ENCODING}): ${formatTokenCount(tokenCount)}`;
+            if (!tokenEncoder) requestTokenRefresh();
+          };
+
+          const promptBodyField = elEditor.querySelector('#pf_ed_body');
+          if (promptBodyField) {
+            promptBodyField.addEventListener('input', updatePromptEditorTokenCount);
+            updatePromptEditorTokenCount();
+          }
 
           // Prompt list button handlers
           elPromptList.querySelectorAll('button[data-act]').forEach(b => {
@@ -1431,6 +1510,7 @@
         <select id="pf_cp_cat">${catOptions}</select>
         <input id="pf_cp_desc" type="text" placeholder="Short description..." value="${escHtml(editing?.description ?? '')}" />
         <textarea id="pf_cp_body" placeholder="Checkpoint text...">${escHtml(editing?.body ?? '')}</textarea>
+        <div id="pf_cp_token_count" class="pf_meta">Tokens (${TOKENIZER_ENCODING}): Loading…</div>
         <div class="pf_inline_actions">
         <button id="pf_cp_save" class="pf_smallbtn">${isNewCheckpoint ? 'Add' : 'Save'}</button>
         <button id="pf_cp_cancel" class="pf_smallbtn">Cancel</button>
@@ -1442,6 +1522,22 @@
         `;
 
         elCheckpointEditor.innerHTML = editorHtml;
+
+        const updateCheckpointEditorTokenCount = () => {
+          const counter = elCheckpointEditor.querySelector('#pf_cp_token_count');
+          const bodyField = elCheckpointEditor.querySelector('#pf_cp_body');
+          if (!counter || !bodyField) return;
+
+          const tokenCount = getTokenCount(bodyField.value || '');
+          counter.textContent = `Tokens (${TOKENIZER_ENCODING}): ${formatTokenCount(tokenCount)}`;
+          if (!tokenEncoder) requestTokenRefresh();
+        };
+
+        const checkpointBodyField = elCheckpointEditor.querySelector('#pf_cp_body');
+        if (checkpointBodyField) {
+          checkpointBodyField.addEventListener('input', updateCheckpointEditorTokenCount);
+          updateCheckpointEditorTokenCount();
+        }
 
         elCheckpointList.querySelectorAll('button[data-act]').forEach(b => {
           b.addEventListener('click', async () => {
