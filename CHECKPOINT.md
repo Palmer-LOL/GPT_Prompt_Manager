@@ -1,44 +1,38 @@
+# CHECKPOINT.md — Conversation Checkpoint
+
+> This file is the durable “state handoff” between Codex tasks.
+> Update only when explicitly asked to CHECKPOINT (/checkpoint).
+
 Conversation Checkpoint
 
 1) Synopsis (1 paragraph)
-The user requested token counting in the Prompt Manager userscript using the js-tiktoken library with o200k_base encoding, including a total-token display in the Insert tab and token visibility while editing prompts/checkpoints. Work completed by integrating lazy-loaded js-tiktoken tokenization, rendering per-item token counts plus Insert-tab totals, and adding live token counters in both Prompt and Checkpoint editors.
+The user requested a CHECKPOINT update after recent work that added a README and adjusted the prompt manager UI/timestamps, so this update captures the latest session context without making code changes.
 
 2) Key facts & decisions (bullets)
-- Implemented tokenizer loading via dynamic ESM imports from js-tiktoken (`lite` + `ranks/o200k_base`).
-- Added per-item token badges on Insert cards for both prompts and checkpoints.
-- Added Insert-tab aggregate token total across currently visible filtered items.
-- Added live token counters in Prompt editor and Checkpoint editor textareas.
-- Added graceful fallback text (`n/a` / unavailable) when tokenizer fails to load.
-- Bumped userscript version from `0.5.1` to `0.6.0`.
+- User explicitly requested /checkpoint, triggering CHECKPOINT mode only.
+- Repository root is /workspace/TamperMonkey_ANONUSERSCRIPTS.
+- Recent context mentions UI changes for the prompt manager and EST timestamp formatting, plus a new README.
 
 3) Open threads / unresolved questions (bullets)
-- Confirm whether token counts should include only body text (current behavior) or title/description as well.
-- Confirm whether user wants token counts shown in additional places (e.g., prompt/checkpoint list in settings tabs).
+- None noted; no new implementation request accompanied the checkpoint update.
 
-4) User intent & success criteria (bullets; mark inferred as **Inferred**)
-- Use js-tiktoken with `o200k_base` to count tokens for prompts/checkpoints.
-- Show token totals on the Insert tab.
-- If possible, show token counts while creating/editing prompts/checkpoints.
-- **Inferred**: Keep UX responsive and avoid blocking UI while tokenizer initializes.
+4) User intent & success criteria (bullets; Inferred where needed)
+- Provide an updated CHECKPOINT.md following the exact schema. 
 
-5) Assumptions & risks (bullets; mark inferred as **Inferred**)
-- **Inferred**: Remote ESM imports from `esm.sh` are acceptable in the userscript runtime.
-- **Inferred**: Body text is the authoritative token-counted content for insert operations.
-- Tokenizer load can fail if third-party CDN is blocked, resulting in `n/a` token displays.
+5) Assumptions & risks (bullets; Inferred where applicable)
+- **Inferred**: No further edits are desired until a CONTINUE/VERIFY request is made.
 
-6) Tone / mood read (1–3 bullets; **Inferred**)
-- **Inferred**: Practical and implementation-focused.
-- **Inferred**: Open to iterative UX improvements (“possibly in the editor”).
+6) Tone / mood read (1–3 bullets; Inferred)
+- **Inferred**: Direct and procedural.
 
 7) Next actions (numbered list, 3–7 items)
-1. Validate token counts on real prompts/checkpoints in Tampermonkey runtime.
-2. Confirm whether title/description should be included in counts.
-3. Optionally cache computed counts for very large libraries to reduce repeated work.
-4. Collect feedback on display wording/placement and adjust UI copy if needed.
+1. Await further user instructions (e.g., CONTINUE or VERIFY).
+2. If CONTINUE is requested, review AGENTS.md and current repo state before changes.
+3. If VERIFY is requested, produce a verification report per schema.
 
 8) Last 10 messages (best-effort recap, chronological, label speakers)
-- User: Requested js-tiktoken (`o200k_base`) integration for prompt/checkpoint token counts and Insert-tab totals.
-- Assistant: Inspected repository files and opened `CHECKPOINT.md` plus userscript source.
-- Assistant: Implemented tokenization, Insert totals, and editor live token counters in `GPT_Prompt_Manager.user.js`.
-- Assistant: Ran a syntax check with Node.
-- Assistant: Attempted and then successfully captured a browser screenshot artifact.
+- User: Reiterated AGENTS.md instructions and environment context.
+- User: Reported dissatisfaction with prior PR output and summarized prior PR title/description/diffs.
+- User: Requested /checkpoint.
+- Assistant: Read CHECKPOINT.md.
+- Assistant: Updated CHECKPOINT.md with the current checkpoint state.

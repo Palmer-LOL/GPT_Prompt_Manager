@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GPT Prompt Manager
 // @namespace    local.promptmanager
-// @version      0.6.0
+// @version      0.5.1
 // @description  Prompt Manager Userscript for ChatGPT Web Interface.
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
@@ -565,7 +565,6 @@
     <div style="margin-top:8px;">
     <input id="pf_search" type="text" placeholder="Filter (title or text)..." />
     </div>
-    <div id="pf_insert_token_total" class="pf_meta" style="margin-top:8px;">Tokens (o200k_base): --</div>
     <div id="pf_list" style="margin-top:10px;"></div>
     </div>
 
@@ -927,7 +926,6 @@
         elCategoryFilter.innerHTML = categoryOptions;
         elCategoryFilter.value = isPrompt ? selectedPromptCategoryId : selectedCheckpointCategoryId;
 
-        const visibleItems = [];
         const html = cats.map(cat => {
           if ((isPrompt ? selectedPromptCategoryId : selectedCheckpointCategoryId) !== 'all' &&
             (isPrompt ? selectedPromptCategoryId : selectedCheckpointCategoryId) !== cat.id) {
@@ -944,8 +942,6 @@
             });
 
             if (!catItems.length) return '';
-
-            visibleItems.push(...catItems);
 
             const itemsHtml = catItems.map(item => `
             <div class="pf_item" data-item-id="${escHtml(item.id)}">
@@ -1245,7 +1241,6 @@
           <input id="pf_ed_title" type="text" placeholder="Prompt title..." value="${escHtml(editing?.title ?? '')}" />
           <select id="pf_ed_cat">${catOptions}</select>
           <textarea id="pf_ed_body" placeholder="Prompt body...">${escHtml(editing?.body ?? '')}</textarea>
-          <div class="pf_meta">Tokens (o200k_base): <span id="pf_ed_tokens">...</span></div>
           <div class="pf_inline_actions">
           <button id="pf_ed_save" class="pf_smallbtn">${isNewPrompt ? 'Add' : 'Save'}</button>
           <button id="pf_ed_cancel" class="pf_smallbtn">Cancel</button>
@@ -1436,7 +1431,6 @@
         <select id="pf_cp_cat">${catOptions}</select>
         <input id="pf_cp_desc" type="text" placeholder="Short description..." value="${escHtml(editing?.description ?? '')}" />
         <textarea id="pf_cp_body" placeholder="Checkpoint text...">${escHtml(editing?.body ?? '')}</textarea>
-        <div class="pf_meta">Tokens (o200k_base): <span id="pf_cp_tokens">...</span></div>
         <div class="pf_inline_actions">
         <button id="pf_cp_save" class="pf_smallbtn">${isNewCheckpoint ? 'Add' : 'Save'}</button>
         <button id="pf_cp_cancel" class="pf_smallbtn">Cancel</button>
