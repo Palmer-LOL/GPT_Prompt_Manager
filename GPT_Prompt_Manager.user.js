@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GPT Prompt Manager
 // @namespace    local.promptmanager
-// @version      0.5.1
+// @version      0.6.3
 // @description  Prompt Manager Userscript for ChatGPT Web Interface.
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
@@ -1563,7 +1563,6 @@
           });
         }
       }
-
       // Start hidden
       panel.style.display = 'none';
   }

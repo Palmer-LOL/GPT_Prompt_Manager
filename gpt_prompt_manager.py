@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import json
+import base64
 import os
 import uuid
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import regex
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -52,6 +54,77 @@ SAMPLE_LIBRARY = {
     "checkpointCategories": copy.deepcopy(SAMPLE_CATEGORIES),
     "checkpoints": [],
 }
+
+TOKEN_ENCODING = "o200k_base"
+O200K_RANKS_PATH = Path(__file__).with_name("o200k_base.json")
+_O200K_RANK_MAP: dict[bytes, int] | None = None
+_O200K_PATTERN: regex.Pattern[str] | None = None
+
+
+def _load_o200k_assets() -> tuple[dict[bytes, int], regex.Pattern[str]]:
+    global _O200K_RANK_MAP, _O200K_PATTERN
+    if _O200K_RANK_MAP is not None and _O200K_PATTERN is not None:
+        return _O200K_RANK_MAP, _O200K_PATTERN
+
+    parsed = json.loads(O200K_RANKS_PATH.read_text(encoding="utf-8"))
+    rank_map: dict[bytes, int] = {}
+    for line in parsed["bpe_ranks"].split("\n"):
+        if not line.strip():
+            continue
+        parts = line.split(" ")
+        if len(parts) < 3:
+            continue
+        offset = int(parts[1])
+        for i, token in enumerate(parts[2:]):
+            rank_map[base64.b64decode(token)] = offset + i
+
+    _O200K_RANK_MAP = rank_map
+    _O200K_PATTERN = regex.compile(parsed["pat_str"], flags=regex.UNICODE)
+    return _O200K_RANK_MAP, _O200K_PATTERN
+
+
+def _byte_pair_merge(piece: bytes, rank_map: dict[bytes, int]) -> list[tuple[int, int]]:
+    parts = [(i, i + 1) for i in range(len(piece))]
+    while len(parts) > 1:
+        min_rank: tuple[int, int] | None = None
+        for i in range(len(parts) - 1):
+            candidate = piece[parts[i][0]:parts[i + 1][1]]
+            rank = rank_map.get(candidate)
+            if rank is None:
+                continue
+            if min_rank is None or rank < min_rank[0]:
+                min_rank = (rank, i)
+        if min_rank is None:
+            break
+        idx = min_rank[1]
+        parts[idx] = (parts[idx][0], parts[idx + 1][1])
+        del parts[idx + 1]
+    return parts
+
+
+def _byte_pair_encode(piece: bytes, rank_map: dict[bytes, int]) -> int:
+    if len(piece) == 1:
+        return 1 if piece in rank_map else 0
+    merged = _byte_pair_merge(piece, rank_map)
+    return sum(1 for start, end in merged if piece[start:end] in rank_map)
+
+
+def count_o200k_tokens(text: str) -> int:
+    rank_map, pattern = _load_o200k_assets()
+    token_count = 0
+    for match in pattern.finditer(text or ""):
+        piece = match.group(0).encode("utf-8")
+        if piece in rank_map:
+            token_count += 1
+            continue
+        token_count += _byte_pair_encode(piece, rank_map)
+    return token_count
+
+
+def token_label(item: dict[str, Any]) -> str:
+    count = item.get("tokenCount")
+    return f"🧮 {count}" if isinstance(count, int) else "🧮 --"
+
 
 
 @dataclass
@@ -305,6 +378,7 @@ class PromptManagerApp:
         ttk.Button(prompt_controls, text="New prompt", command=self.new_prompt).pack(fill=tk.X)
         ttk.Button(prompt_controls, text="Delete prompt", command=self.delete_prompt).pack(fill=tk.X, pady=(4, 0))
         ttk.Button(prompt_controls, text="Copy body", command=self.copy_prompt_body).pack(fill=tk.X, pady=(4, 0))
+        ttk.Button(prompt_controls, text="Calc tokens", command=self.calculate_selected_prompt_tokens).pack(fill=tk.X, pady=(4, 0))
 
         right = ttk.Frame(self.prompt_tab)
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -313,6 +387,8 @@ class PromptManagerApp:
         self.prompt_title = tk.StringVar()
         ttk.Entry(right, textvariable=self.prompt_title).pack(fill=tk.X)
 
+        self.prompt_token_var = tk.StringVar(value="Tokens (o200k_base): --")
+        ttk.Label(right, textvariable=self.prompt_token_var, padding=(0, 8, 0, 0)).pack(anchor="w")
         ttk.Label(right, text="Body", padding=(0, 8, 0, 0)).pack(anchor="w")
         self.prompt_body = tk.Text(right, wrap=tk.WORD)
         self.prompt_body.pack(fill=tk.BOTH, expand=True)
@@ -343,6 +419,7 @@ class PromptManagerApp:
         ttk.Button(checkpoint_controls, text="New checkpoint", command=self.new_checkpoint).pack(fill=tk.X)
         ttk.Button(checkpoint_controls, text="Delete checkpoint", command=self.delete_checkpoint).pack(fill=tk.X, pady=(4, 0))
         ttk.Button(checkpoint_controls, text="Copy body", command=self.copy_checkpoint_body).pack(fill=tk.X, pady=(4, 0))
+        ttk.Button(checkpoint_controls, text="Calc tokens", command=self.calculate_selected_checkpoint_tokens).pack(fill=tk.X, pady=(4, 0))
 
         right = ttk.Frame(self.checkpoint_tab)
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -354,6 +431,8 @@ class PromptManagerApp:
         self.checkpoint_desc = self._extracted_from__build_checkpoint_tab_32(
             right, "Body"
         )
+        self.checkpoint_token_var = tk.StringVar(value="Tokens (o200k_base): --")
+        ttk.Label(right, textvariable=self.checkpoint_token_var, padding=(0, 8, 0, 0)).pack(anchor="w")
         self.checkpoint_body = tk.Text(right, wrap=tk.WORD)
         self.checkpoint_body.pack(fill=tk.BOTH, expand=True)
 
@@ -391,7 +470,7 @@ class PromptManagerApp:
         self.prompt_list.delete(0, tk.END)
         prompts = [p for p in self.library["prompts"] if p["categoryId"] == current_category]
         for p in prompts:
-            self.prompt_list.insert(tk.END, p["title"])
+            self.prompt_list.insert(tk.END, f"{p['title']} ({token_label(p)})")
         self.selected_prompt_id = prompts[0]["id"] if prompts else None
         if prompts:
             self.prompt_list.selection_set(0)
@@ -409,7 +488,7 @@ class PromptManagerApp:
         self.checkpoint_list.delete(0, tk.END)
         checkpoints = [c for c in self.library["checkpoints"] if c["categoryId"] == current_category]
         for c in checkpoints:
-            self.checkpoint_list.insert(tk.END, f"{c['title']} ({c['savedAt']})")
+            self.checkpoint_list.insert(tk.END, f"{c['title']} ({c['savedAt']}) ({token_label(c)})")
         self.selected_checkpoint_id = checkpoints[0]["id"] if checkpoints else None
         if checkpoints:
             self.checkpoint_list.selection_set(0)
@@ -425,6 +504,7 @@ class PromptManagerApp:
         self.prompt_body.delete("1.0", tk.END)
         if item:
             self.prompt_body.insert("1.0", item["body"])
+        self.prompt_token_var.set(self._token_display_text(item))
 
     def on_checkpoint_selected(self) -> None:
         current_category = self._selected_category_id("checkpoint")
@@ -437,6 +517,7 @@ class PromptManagerApp:
         self.checkpoint_body.delete("1.0", tk.END)
         if item:
             self.checkpoint_body.insert("1.0", item["body"])
+        self.checkpoint_token_var.set(self._token_display_text(item))
 
     def add_prompt_category(self) -> None:
         name = self.prompt_category_name.get().strip()
@@ -485,7 +566,7 @@ class PromptManagerApp:
         if not category_id:
             messagebox.showerror("Missing category", "Create at least one prompt category first.")
             return
-        new_item = {"id": uid("p"), "categoryId": category_id, "title": "New prompt", "body": ""}
+        new_item = {"id": uid("p"), "categoryId": category_id, "title": "New prompt", "body": "", "tokenCount": None, "tokenEncoding": TOKEN_ENCODING, "tokenCountUpdatedAt": None}
         self.library["prompts"].append(new_item)
         self.refresh_prompts()
         self.save_current()
@@ -509,6 +590,9 @@ class PromptManagerApp:
             "description": "",
             "body": "",
             "savedAt": est_timestamp(),
+            "tokenCount": None,
+            "tokenEncoding": TOKEN_ENCODING,
+            "tokenCountUpdatedAt": None,
         }
         self.library["checkpoints"].append(new_item)
         self.refresh_checkpoints()
@@ -552,6 +636,51 @@ class PromptManagerApp:
         ):
             self._copy_text(item["body"])
 
+
+    def _token_display_text(self, item: dict[str, Any] | None) -> str:
+        if not item:
+            return f"Tokens ({TOKEN_ENCODING}): --"
+        count = item.get("tokenCount")
+        if isinstance(count, int):
+            return f"Tokens ({TOKEN_ENCODING}): {count}"
+        return f"Tokens ({TOKEN_ENCODING}): not calculated"
+
+    def calculate_selected_prompt_tokens(self) -> None:
+        if not self.selected_prompt_id:
+            return
+        item = next((p for p in self.library["prompts"] if p["id"] == self.selected_prompt_id), None)
+        if not item:
+            return
+        try:
+            count = count_o200k_tokens(item.get("body", ""))
+        except Exception as exc:
+            messagebox.showerror("Token counter error", f"Could not calculate tokens:\n{exc}")
+            return
+        item["tokenCount"] = count
+        item["tokenEncoding"] = TOKEN_ENCODING
+        item["tokenCountUpdatedAt"] = est_timestamp()
+        self.save_library()
+        self.status_var.set(f"Saved token count: {count}")
+        self.refresh_prompts()
+
+    def calculate_selected_checkpoint_tokens(self) -> None:
+        if not self.selected_checkpoint_id:
+            return
+        item = next((c for c in self.library["checkpoints"] if c["id"] == self.selected_checkpoint_id), None)
+        if not item:
+            return
+        try:
+            count = count_o200k_tokens(item.get("body", ""))
+        except Exception as exc:
+            messagebox.showerror("Token counter error", f"Could not calculate tokens:\n{exc}")
+            return
+        item["tokenCount"] = count
+        item["tokenEncoding"] = TOKEN_ENCODING
+        item["tokenCountUpdatedAt"] = est_timestamp()
+        self.save_library()
+        self.status_var.set(f"Saved token count: {count}")
+        self.refresh_checkpoints()
+
     def save_current(self) -> None:
         if self.selected_prompt_id:
             if item := next(
@@ -564,6 +693,9 @@ class PromptManagerApp:
             ):
                 item["title"] = self.prompt_title.get().strip() or item["title"]
                 item["body"] = self.prompt_body.get("1.0", tk.END).rstrip("\n")
+                item["tokenCount"] = None
+                item["tokenEncoding"] = TOKEN_ENCODING
+                item["tokenCountUpdatedAt"] = None
 
         if self.selected_checkpoint_id:
             if item := next(
@@ -578,6 +710,9 @@ class PromptManagerApp:
                 item["description"] = self.checkpoint_desc.get().strip()
                 item["body"] = self.checkpoint_body.get("1.0", tk.END).rstrip("\n")
                 item["savedAt"] = est_timestamp()
+                item["tokenCount"] = None
+                item["tokenEncoding"] = TOKEN_ENCODING
+                item["tokenCountUpdatedAt"] = None
 
         ok, err = validate_library_shape(self.library)
         if not ok:
