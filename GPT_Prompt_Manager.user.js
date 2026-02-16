@@ -149,38 +149,6 @@
     return (categories || []).map(c => ({ id: c.id, name: c.name }));
   }
 
-  let o200kTokenizer = null;
-  let o200kTokenizerPromise = null;
-
-  async function getO200kTokenizer() {
-    if (o200kTokenizer) return o200kTokenizer;
-    if (o200kTokenizerPromise) return o200kTokenizerPromise;
-
-    o200kTokenizerPromise = (async () => {
-      const [{ Tiktoken }, { default: o200kBase }] = await Promise.all([
-        import('https://esm.sh/js-tiktoken@1.0.21/lite'),
-        import('https://esm.sh/js-tiktoken@1.0.21/ranks/o200k_base')
-      ]);
-      const encoder = new Tiktoken(o200kBase);
-      o200kTokenizer = {
-        count: (text) => encoder.encode(text || '').length
-      };
-      return o200kTokenizer;
-    })().catch((err) => {
-      console.warn('[Prompt Manager] Failed to load js-tiktoken:', err);
-      o200kTokenizerPromise = null;
-      return null;
-    });
-
-    return o200kTokenizerPromise;
-  }
-
-  async function countO200kTokens(text) {
-    const tokenizer = await getO200kTokenizer();
-    if (!tokenizer) return null;
-    return tokenizer.count(text || '');
-  }
-
   function getEstTimestamp(date = new Date()) {
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/New_York',
@@ -750,7 +718,6 @@
     const elSearch = panel.querySelector('#pf_search');
     const elInsertTokenSummary = panel.querySelector('#pf_insert_token_summary');
     const elList = panel.querySelector('#pf_list');
-    const elInsertTokenTotal = panel.querySelector('#pf_insert_token_total');
     const elTabInsert = panel.querySelector('#pf_tab_insert');
     const elTabPromptSettings = panel.querySelector('#pf_tab_prompt_settings');
     const elTabCheckpointSettings = panel.querySelector('#pf_tab_checkpoint_settings');
@@ -776,7 +743,6 @@
     const elPromptList = panel.querySelector('#pf_prompt_list');
     const elCheckpointList = panel.querySelector('#pf_checkpoint_list');
     const elPromptOrderCategory = panel.querySelector('#pf_prompt_order_category');
-    let tokenRenderVersion = 0;
 
     function showPanel() {
       panel.style.display = 'block';
@@ -1035,7 +1001,6 @@
             ${item.description ? `<div class="pf_help">${escHtml(item.description)}</div>` : ''}
             <div class="pf_meta">Tokens (${TOKENIZER_ENCODING}): ${formatTokenCount(tokenCount)}</div>
             <div class="pf_body">${escHtml(item.body)}</div>
-            <div class="pf_meta">Tokens (o200k_base): <span class="pf_token_count" data-item-id="${escHtml(item.id)}">...</span></div>
             <div class="pf_inline_actions">
             <button class="pf_smallbtn" data-act="item_insert" data-id="${escHtml(item.id)}">Insert</button>
             <button class="pf_smallbtn" data-act="item_copy" data-id="${escHtml(item.id)}">Copy</button>
@@ -1060,12 +1025,6 @@
         }
 
         elList.innerHTML = html || `<div class="pf_help">${emptyLabel}</div>`;
-        elInsertTokenTotal.textContent = visibleItems.length
-          ? 'Tokens (o200k_base): calculating...'
-          : 'Tokens (o200k_base): 0 across 0 items';
-
-        const currentTokenRenderVersion = ++tokenRenderVersion;
-        updateInsertTokenCounts(visibleItems, currentTokenRenderVersion);
 
         async function handleInsert(itemObj) {
           const composer = findComposerElement();
@@ -1119,37 +1078,6 @@
             await handleInsert(itemObj);
           });
         });
-      }
-
-      async function updateInsertTokenCounts(visibleItems, renderVersion) {
-        if (!visibleItems.length) return;
-
-        const lookup = new Map(visibleItems.map(item => [item.id, item]));
-        const tokenSpans = Array.from(elList.querySelectorAll('.pf_token_count'));
-        if (!tokenSpans.length) return;
-
-        const tokenizer = await getO200kTokenizer();
-        if (renderVersion !== tokenRenderVersion) return;
-
-        if (!tokenizer) {
-          tokenSpans.forEach(span => { span.textContent = 'n/a'; });
-          elInsertTokenTotal.textContent = 'Tokens (o200k_base): unavailable (tokenizer failed to load)';
-          return;
-        }
-
-        let total = 0;
-        tokenSpans.forEach((span) => {
-          const item = lookup.get(span.getAttribute('data-item-id'));
-          if (!item) {
-            span.textContent = '--';
-            return;
-          }
-          const count = tokenizer.count(item.body || '');
-          total += count;
-          span.textContent = String(count);
-        });
-
-        elInsertTokenTotal.textContent = `Tokens (o200k_base): ${total} across ${visibleItems.length} item(s)`;
       }
 
       function renderPromptSettings() {
@@ -1387,7 +1315,6 @@
           `;
 
           elEditor.innerHTML = editorHtml;
-          bindLiveTokenCounter(elEditor, '#pf_ed_body', '#pf_ed_tokens');
 
           const updatePromptEditorTokenCount = () => {
             const counter = elEditor.querySelector('#pf_ed_token_count');
@@ -1595,7 +1522,6 @@
         `;
 
         elCheckpointEditor.innerHTML = editorHtml;
-        bindLiveTokenCounter(elCheckpointEditor, '#pf_cp_body', '#pf_cp_tokens');
 
         const updateCheckpointEditorTokenCount = () => {
           const counter = elCheckpointEditor.querySelector('#pf_cp_token_count');
@@ -1732,25 +1658,6 @@
             }
           });
         }
-      }
-
-      function bindLiveTokenCounter(root, inputSelector, outputSelector) {
-        const input = root.querySelector(inputSelector);
-        const output = root.querySelector(outputSelector);
-        if (!(input instanceof HTMLTextAreaElement) || !(output instanceof HTMLElement)) return;
-
-        let runId = 0;
-
-        const refresh = async () => {
-          const thisRun = ++runId;
-          output.textContent = '...';
-          const count = await countO200kTokens(input.value || '');
-          if (thisRun !== runId) return;
-          output.textContent = count === null ? 'n/a' : String(count);
-        };
-
-        input.addEventListener('input', refresh);
-        refresh();
       }
 
       // Start hidden
