@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GPT Prompt Manager
 // @namespace    local.promptmanager
-// @version      0.5.1
+// @version      0.6.0
 // @description  Prompt Manager Userscript for ChatGPT Web Interface.
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
@@ -112,6 +112,38 @@
 
   function cloneCategories(categories) {
     return (categories || []).map(c => ({ id: c.id, name: c.name }));
+  }
+
+  let o200kTokenizer = null;
+  let o200kTokenizerPromise = null;
+
+  async function getO200kTokenizer() {
+    if (o200kTokenizer) return o200kTokenizer;
+    if (o200kTokenizerPromise) return o200kTokenizerPromise;
+
+    o200kTokenizerPromise = (async () => {
+      const [{ Tiktoken }, { default: o200kBase }] = await Promise.all([
+        import('https://esm.sh/js-tiktoken@1.0.21/lite'),
+        import('https://esm.sh/js-tiktoken@1.0.21/ranks/o200k_base')
+      ]);
+      const encoder = new Tiktoken(o200kBase);
+      o200kTokenizer = {
+        count: (text) => encoder.encode(text || '').length
+      };
+      return o200kTokenizer;
+    })().catch((err) => {
+      console.warn('[Prompt Manager] Failed to load js-tiktoken:', err);
+      o200kTokenizerPromise = null;
+      return null;
+    });
+
+    return o200kTokenizerPromise;
+  }
+
+  async function countO200kTokens(text) {
+    const tokenizer = await getO200kTokenizer();
+    if (!tokenizer) return null;
+    return tokenizer.count(text || '');
   }
 
   function getEstTimestamp(date = new Date()) {
@@ -565,6 +597,7 @@
     <div style="margin-top:8px;">
     <input id="pf_search" type="text" placeholder="Filter (title or text)..." />
     </div>
+    <div id="pf_insert_token_total" class="pf_meta" style="margin-top:8px;">Tokens (o200k_base): --</div>
     <div id="pf_list" style="margin-top:10px;"></div>
     </div>
 
@@ -680,6 +713,7 @@
     const elCategoryFilter = panel.querySelector('#pf_category_filter');
     const elSearch = panel.querySelector('#pf_search');
     const elList = panel.querySelector('#pf_list');
+    const elInsertTokenTotal = panel.querySelector('#pf_insert_token_total');
     const elTabInsert = panel.querySelector('#pf_tab_insert');
     const elTabPromptSettings = panel.querySelector('#pf_tab_prompt_settings');
     const elTabCheckpointSettings = panel.querySelector('#pf_tab_checkpoint_settings');
@@ -705,6 +739,7 @@
     const elPromptList = panel.querySelector('#pf_prompt_list');
     const elCheckpointList = panel.querySelector('#pf_checkpoint_list');
     const elPromptOrderCategory = panel.querySelector('#pf_prompt_order_category');
+    let tokenRenderVersion = 0;
 
     function showPanel() {
       panel.style.display = 'block';
@@ -926,6 +961,7 @@
         elCategoryFilter.innerHTML = categoryOptions;
         elCategoryFilter.value = isPrompt ? selectedPromptCategoryId : selectedCheckpointCategoryId;
 
+        const visibleItems = [];
         const html = cats.map(cat => {
           if ((isPrompt ? selectedPromptCategoryId : selectedCheckpointCategoryId) !== 'all' &&
             (isPrompt ? selectedPromptCategoryId : selectedCheckpointCategoryId) !== cat.id) {
@@ -943,11 +979,14 @@
 
             if (!catItems.length) return '';
 
+            visibleItems.push(...catItems);
+
             const itemsHtml = catItems.map(item => `
             <div class="pf_item" data-item-id="${escHtml(item.id)}">
             <div class="pf_title">${escHtml(item.title)}</div>
             ${item.description ? `<div class="pf_help">${escHtml(item.description)}</div>` : ''}
             <div class="pf_body">${escHtml(item.body)}</div>
+            <div class="pf_meta">Tokens (o200k_base): <span class="pf_token_count" data-item-id="${escHtml(item.id)}">...</span></div>
             <div class="pf_inline_actions">
             <button class="pf_smallbtn" data-act="item_insert" data-id="${escHtml(item.id)}">Insert</button>
             <button class="pf_smallbtn" data-act="item_copy" data-id="${escHtml(item.id)}">Copy</button>
@@ -963,6 +1002,12 @@
         : 'No checkpoints match your filter — or your library is empty. Switch to “Checkpoint Settings” to add some.';
 
         elList.innerHTML = html || `<div class="pf_help">${emptyLabel}</div>`;
+        elInsertTokenTotal.textContent = visibleItems.length
+          ? 'Tokens (o200k_base): calculating...'
+          : 'Tokens (o200k_base): 0 across 0 items';
+
+        const currentTokenRenderVersion = ++tokenRenderVersion;
+        updateInsertTokenCounts(visibleItems, currentTokenRenderVersion);
 
         async function handleInsert(itemObj) {
           const composer = findComposerElement();
@@ -1016,6 +1061,37 @@
             await handleInsert(itemObj);
           });
         });
+      }
+
+      async function updateInsertTokenCounts(visibleItems, renderVersion) {
+        if (!visibleItems.length) return;
+
+        const lookup = new Map(visibleItems.map(item => [item.id, item]));
+        const tokenSpans = Array.from(elList.querySelectorAll('.pf_token_count'));
+        if (!tokenSpans.length) return;
+
+        const tokenizer = await getO200kTokenizer();
+        if (renderVersion !== tokenRenderVersion) return;
+
+        if (!tokenizer) {
+          tokenSpans.forEach(span => { span.textContent = 'n/a'; });
+          elInsertTokenTotal.textContent = 'Tokens (o200k_base): unavailable (tokenizer failed to load)';
+          return;
+        }
+
+        let total = 0;
+        tokenSpans.forEach((span) => {
+          const item = lookup.get(span.getAttribute('data-item-id'));
+          if (!item) {
+            span.textContent = '--';
+            return;
+          }
+          const count = tokenizer.count(item.body || '');
+          total += count;
+          span.textContent = String(count);
+        });
+
+        elInsertTokenTotal.textContent = `Tokens (o200k_base): ${total} across ${visibleItems.length} item(s)`;
       }
 
       function renderPromptSettings() {
@@ -1241,6 +1317,7 @@
           <input id="pf_ed_title" type="text" placeholder="Prompt title..." value="${escHtml(editing?.title ?? '')}" />
           <select id="pf_ed_cat">${catOptions}</select>
           <textarea id="pf_ed_body" placeholder="Prompt body...">${escHtml(editing?.body ?? '')}</textarea>
+          <div class="pf_meta">Tokens (o200k_base): <span id="pf_ed_tokens">...</span></div>
           <div class="pf_inline_actions">
           <button id="pf_ed_save" class="pf_smallbtn">${isNewPrompt ? 'Add' : 'Save'}</button>
           <button id="pf_ed_cancel" class="pf_smallbtn">Cancel</button>
@@ -1252,6 +1329,7 @@
           `;
 
           elEditor.innerHTML = editorHtml;
+          bindLiveTokenCounter(elEditor, '#pf_ed_body', '#pf_ed_tokens');
 
           // Prompt list button handlers
           elPromptList.querySelectorAll('button[data-act]').forEach(b => {
@@ -1431,6 +1509,7 @@
         <select id="pf_cp_cat">${catOptions}</select>
         <input id="pf_cp_desc" type="text" placeholder="Short description..." value="${escHtml(editing?.description ?? '')}" />
         <textarea id="pf_cp_body" placeholder="Checkpoint text...">${escHtml(editing?.body ?? '')}</textarea>
+        <div class="pf_meta">Tokens (o200k_base): <span id="pf_cp_tokens">...</span></div>
         <div class="pf_inline_actions">
         <button id="pf_cp_save" class="pf_smallbtn">${isNewCheckpoint ? 'Add' : 'Save'}</button>
         <button id="pf_cp_cancel" class="pf_smallbtn">Cancel</button>
@@ -1442,6 +1521,7 @@
         `;
 
         elCheckpointEditor.innerHTML = editorHtml;
+        bindLiveTokenCounter(elCheckpointEditor, '#pf_cp_body', '#pf_cp_tokens');
 
         elCheckpointList.querySelectorAll('button[data-act]').forEach(b => {
           b.addEventListener('click', async () => {
@@ -1562,6 +1642,25 @@
             }
           });
         }
+      }
+
+      function bindLiveTokenCounter(root, inputSelector, outputSelector) {
+        const input = root.querySelector(inputSelector);
+        const output = root.querySelector(outputSelector);
+        if (!(input instanceof HTMLTextAreaElement) || !(output instanceof HTMLElement)) return;
+
+        let runId = 0;
+
+        const refresh = async () => {
+          const thisRun = ++runId;
+          output.textContent = '...';
+          const count = await countO200kTokens(input.value || '');
+          if (thisRun !== runId) return;
+          output.textContent = count === null ? 'n/a' : String(count);
+        };
+
+        input.addEventListener('input', refresh);
+        refresh();
       }
 
       // Start hidden
