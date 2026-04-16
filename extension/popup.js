@@ -1,10 +1,14 @@
 const MAX_PREVIEW_LINES = 6;
+const STATUS_RESET_MS = 3000;
 
 const kindSelect = document.querySelector('#kind-select');
 const categorySelect = document.querySelector('#category-select');
 const itemSelect = document.querySelector('#item-select');
 const previewContent = document.querySelector('#preview-content');
+const copyButton = document.querySelector('#copy-button');
 const statusText = document.querySelector('#status-text');
+
+let statusTimerId;
 
 function uniqueValues(values) {
   return [...new Set(values)];
@@ -23,6 +27,30 @@ function createOption(value, label) {
 
 function setOptions(select, options) {
   select.replaceChildren(...options);
+}
+
+function setStatus(message, type) {
+  clearTimeout(statusTimerId);
+
+  statusText.textContent = message;
+  statusText.classList.remove('status--success', 'status--error');
+
+  if (type === 'success') {
+    statusText.classList.add('status--success');
+  }
+
+  if (type === 'error') {
+    statusText.classList.add('status--error');
+  }
+
+  if (!message) {
+    return;
+  }
+
+  statusTimerId = setTimeout(() => {
+    statusText.textContent = '';
+    statusText.classList.remove('status--success', 'status--error');
+  }, STATUS_RESET_MS);
 }
 
 async function loadSampleData() {
@@ -44,19 +72,21 @@ function filterByCategory(items, category) {
   return items.filter((item) => item.category === category);
 }
 
-function renderCategories(items, selectedKind) {
-  const categories = uniqueValues(filterByKind(items, selectedKind).map((item) => item.category));
-  const options = categories.map((category) => createOption(category, category));
+function getSelectedItem(items) {
+  return items.find((item) => item.id === itemSelect.value) ?? null;
+}
 
-  setOptions(categorySelect, options);
+function updatePreview(items) {
+  const selectedItem = getSelectedItem(items);
 
-  if (categories.length === 0) {
-    setOptions(itemSelect, []);
-    previewContent.textContent = 'No items found.';
+  if (!selectedItem) {
+    previewContent.textContent = 'No preview available.';
+    copyButton.disabled = true;
     return;
   }
 
-  renderItems(items, selectedKind, categories[0]);
+  previewContent.textContent = getPreviewLines(selectedItem.content);
+  copyButton.disabled = false;
 }
 
 function renderItems(items, selectedKind, selectedCategory) {
@@ -67,38 +97,29 @@ function renderItems(items, selectedKind, selectedCategory) {
 
   if (filteredItems.length === 0) {
     previewContent.textContent = 'No items found.';
+    copyButton.disabled = true;
     return;
   }
 
-  previewContent.textContent = getPreviewLines(filteredItems[0].content);
+  itemSelect.value = filteredItems[0].id;
+  updatePreview(items);
 }
 
-function updatePreview(items) {
-  const selectedItem = items.find((item) => item.id === itemSelect.value);
+function renderCategories(items, selectedKind) {
+  const categories = uniqueValues(filterByKind(items, selectedKind).map((item) => item.category));
+  const options = categories.map((category) => createOption(category, category));
 
-  if (!selectedItem) {
-    previewContent.textContent = 'No preview available.';
+  setOptions(categorySelect, options);
+
+  if (categories.length === 0) {
+    setOptions(itemSelect, []);
+    previewContent.textContent = 'No items found.';
+    copyButton.disabled = true;
     return;
   }
 
-  previewContent.textContent = getPreviewLines(selectedItem.content);
-}
-
-function bindEvents(items) {
-  kindSelect.addEventListener('change', () => {
-    renderCategories(items, kindSelect.value);
-    statusText.textContent = 'Copy action will be added in the next step.';
-  });
-
-  categorySelect.addEventListener('change', () => {
-    renderItems(items, kindSelect.value, categorySelect.value);
-    statusText.textContent = 'Copy action will be added in the next step.';
-  });
-
-  itemSelect.addEventListener('change', () => {
-    updatePreview(items);
-    statusText.textContent = 'Copy action will be added in the next step.';
-  });
+  categorySelect.value = categories[0];
+  renderItems(items, selectedKind, categories[0]);
 }
 
 function renderKinds(items) {
@@ -109,10 +130,50 @@ function renderKinds(items) {
 
   if (kinds.length === 0) {
     previewContent.textContent = 'No items found.';
+    copyButton.disabled = true;
     return;
   }
 
+  kindSelect.value = kinds[0];
   renderCategories(items, kinds[0]);
+}
+
+async function copySelectedItem(items) {
+  const selectedItem = getSelectedItem(items);
+
+  if (!selectedItem) {
+    setStatus('Nothing selected to copy.', 'error');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(selectedItem.content);
+    setStatus('Copied to clipboard.', 'success');
+  } catch (error) {
+    console.error(error);
+    setStatus('Copy failed. Please try again.', 'error');
+  }
+}
+
+function bindEvents(items) {
+  kindSelect.addEventListener('change', () => {
+    renderCategories(items, kindSelect.value);
+    setStatus('', undefined);
+  });
+
+  categorySelect.addEventListener('change', () => {
+    renderItems(items, kindSelect.value, categorySelect.value);
+    setStatus('', undefined);
+  });
+
+  itemSelect.addEventListener('change', () => {
+    updatePreview(items);
+    setStatus('', undefined);
+  });
+
+  copyButton.addEventListener('click', async () => {
+    await copySelectedItem(items);
+  });
 }
 
 async function initPopup() {
@@ -124,7 +185,8 @@ async function initPopup() {
   } catch (error) {
     console.error(error);
     previewContent.textContent = 'Failed to load sample data.';
-    statusText.textContent = 'Please check extension data files.';
+    copyButton.disabled = true;
+    setStatus('Please check extension data files.', 'error');
   }
 }
 
