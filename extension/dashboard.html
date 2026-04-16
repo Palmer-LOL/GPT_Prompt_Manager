@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GPT Prompt Manager Dashboard</title>
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+  <body>
+    <main class="dashboard">
+      <header class="dashboard__header">
+        <h1>GPT Prompt Manager Dashboard</h1>
+        <p id="save-status" class="save-status" aria-live="polite"></p>
+      </header>
+
+      <nav class="tabs" aria-label="Dashboard sections">
+        <button id="tab-prompts" class="tab tab--active" type="button">Prompts</button>
+        <button id="tab-checkpoints" class="tab" type="button">Checkpoints</button>
+      </nav>
+
+      <section id="panel-prompts" class="panel panel--active">
+        <div class="panel-grid">
+          <section class="card">
+            <h2>Prompt Categories</h2>
+            <ul id="prompt-categories" class="list"></ul>
+            <div class="inline-form">
+              <input id="prompt-category-name" type="text" placeholder="New category name" />
+              <button id="prompt-category-add" type="button">Add</button>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Prompts</h2>
+            <ul id="prompt-items" class="list"></ul>
+            <button id="prompt-new" type="button">New Prompt</button>
+          </section>
+
+          <section class="card">
+            <h2>Prompt Editor</h2>
+            <div class="form-grid">
+              <label for="prompt-editor-category">Category</label>
+              <select id="prompt-editor-category"></select>
+
+              <label for="prompt-editor-title">Title</label>
+              <input id="prompt-editor-title" type="text" placeholder="Prompt title" />
+
+              <label for="prompt-editor-body">Body</label>
+              <textarea id="prompt-editor-body" rows="12" placeholder="Prompt body"></textarea>
+            </div>
+            <div class="actions">
+              <button id="prompt-save" type="button">Save Prompt</button>
+              <button id="prompt-cancel" type="button" class="btn-secondary">Cancel</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="panel-checkpoints" class="panel">
+        <div class="panel-grid">
+          <section class="card">
+            <h2>Checkpoint Categories</h2>
+            <ul id="checkpoint-categories" class="list"></ul>
+            <div class="inline-form">
+              <input id="checkpoint-category-name" type="text" placeholder="New category name" />
+              <button id="checkpoint-category-add" type="button">Add</button>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Checkpoints</h2>
+            <ul id="checkpoint-items" class="list"></ul>
+            <button id="checkpoint-new" type="button">New Checkpoint</button>
+          </section>
+
+          <section class="card">
+            <h2>Checkpoint Editor</h2>
+            <div class="form-grid">
+              <label for="checkpoint-editor-category">Category</label>
+              <select id="checkpoint-editor-category"></select>
+
+              <label for="checkpoint-editor-title">Title</label>
+              <input id="checkpoint-editor-title" type="text" placeholder="Checkpoint title" />
+
+              <label for="checkpoint-editor-description">Description</label>
+              <input id="checkpoint-editor-description" type="text" placeholder="Short description" />
+
+              <label for="checkpoint-editor-body">Body</label>
+              <textarea id="checkpoint-editor-body" rows="10" placeholder="Checkpoint body"></textarea>
+            </div>
+            <div class="actions">
+              <button id="checkpoint-save" type="button">Save Checkpoint</button>
+              <button id="checkpoint-cancel" type="button" class="btn-secondary">Cancel</button>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="dashboard.js" type="module"></script>
+  </body>
+</html>
