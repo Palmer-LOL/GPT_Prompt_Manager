@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "GPT Prompt Manager Extension",
+  "version": "0.1.0",
+  "description": "Popup MVP for browsing prompt/checkpoint placeholders and preparing clipboard workflows.",
+  "action": {
+    "default_title": "GPT Prompt Manager",
+    "default_popup": "popup.html"
+  }
+}
