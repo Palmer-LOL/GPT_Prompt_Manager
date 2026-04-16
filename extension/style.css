@@ -1,20 +1,58 @@
 :root {
   color-scheme: light dark;
+  font-family: Arial, sans-serif;
 }
 
 body {
-  font-family: Arial, sans-serif;
   margin: 0;
-  min-width: 320px;
+  min-width: 340px;
   padding: 12px;
+}
+
+.popup {
+  display: grid;
+  gap: 8px;
 }
 
 h1 {
   font-size: 16px;
-  margin: 0 0 8px;
+  margin: 0 0 4px;
 }
 
-p {
+h2 {
   font-size: 13px;
   margin: 0;
+}
+
+label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+select {
+  font-size: 13px;
+  padding: 6px;
+}
+
+.preview {
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+}
+
+#preview-content {
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0;
+  max-height: 150px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.status {
+  font-size: 11px;
+  margin: 2px 0 0;
+  opacity: 0.8;
 }

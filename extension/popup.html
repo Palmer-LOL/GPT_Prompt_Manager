@@ -7,9 +7,24 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main>
+    <main class="popup">
       <h1>GPT Prompt Manager</h1>
-      <p>Extension popup scaffold initialized.</p>
+
+      <label for="kind-select">Type</label>
+      <select id="kind-select" aria-label="Select prompt type"></select>
+
+      <label for="category-select">Category</label>
+      <select id="category-select" aria-label="Select category"></select>
+
+      <label for="item-select">Item</label>
+      <select id="item-select" aria-label="Select item"></select>
+
+      <section class="preview" aria-live="polite">
+        <h2>Preview</h2>
+        <pre id="preview-content"></pre>
+      </section>
+
+      <p class="status" id="status-text">Copy action will be added in the next step.</p>
     </main>
     <script src="popup.js" type="module"></script>
   </body>
