@@ -24,14 +24,13 @@ When updating `CHECKPOINT.md`, use this exact structure:
 
 End after section 8.
 
-## Repo conventions (fill in as needed)
-- Install deps: (TODO)
-- Run tests: (TODO)
-- Lint/format: (TODO)
-- Build: (TODO)
-- CI notes: (TODO)
-
-## Safety / security (optional defaults)
+## Repo conventions
 - Avoid introducing secrets into commits or logs.
-- Avoid adding telemetry or network calls unless explicitly requested.
+- Avoid third party libraries or dependencies unless strictly necessary.
+- If third party dependencies cannot be avoided, inform user and request explicit confirmation.
+- Relay open threads and suggested next steps in user response in addition to documenting 'CHECKPOINT.md'
+- Update manifest version number per semantic versioning standards for each commit
 - Prefer deterministic, testable changes.
+- Avoid adding telemetry or network calls unless explicitly requested.
+
+
