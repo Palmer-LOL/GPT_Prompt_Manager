@@ -1,3 +1,5 @@
+import { loadLibrary } from './lib/storage.js';
+
 const MAX_PREVIEW_LINES = 6;
 const STATUS_RESET_MS = 3000;
 
@@ -6,16 +8,14 @@ const categorySelect = document.querySelector('#category-select');
 const itemSelect = document.querySelector('#item-select');
 const previewContent = document.querySelector('#preview-content');
 const copyButton = document.querySelector('#copy-button');
+const dashboardButton = document.querySelector('#open-dashboard-button');
 const statusText = document.querySelector('#status-text');
 
 let statusTimerId;
-
-function uniqueValues(values) {
-  return [...new Set(values)];
-}
+let library = null;
 
 function getPreviewLines(content) {
-  return content.split('\n').slice(0, MAX_PREVIEW_LINES).join('\n');
+  return String(content).split('\n').slice(0, MAX_PREVIEW_LINES).join('\n');
 }
 
 function createOption(value, label) {
@@ -53,31 +53,25 @@ function setStatus(message, type) {
   }, STATUS_RESET_MS);
 }
 
-async function loadSampleData() {
-  const response = await fetch(chrome.runtime.getURL('data/sample-prompts.json'));
-
-  if (!response.ok) {
-    throw new Error(`Failed to load sample prompts: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.items;
+function getCurrentKind() {
+  return kindSelect.value;
 }
 
-function filterByKind(items, kind) {
-  return items.filter((item) => item.kind === kind);
+function getCategoriesByKind(kind) {
+  return kind === 'prompt' ? library.categories : library.checkpointCategories;
 }
 
-function filterByCategory(items, category) {
-  return items.filter((item) => item.category === category);
+function getItemsByKind(kind) {
+  return kind === 'prompt' ? library.prompts : library.checkpoints;
 }
 
-function getSelectedItem(items) {
-  return items.find((item) => item.id === itemSelect.value) ?? null;
+function getSelectedItem() {
+  const items = getItemsByKind(getCurrentKind());
+  return items.find((item) => item.id === itemSelect.value) || null;
 }
 
-function updatePreview(items) {
-  const selectedItem = getSelectedItem(items);
+function updatePreview() {
+  const selectedItem = getSelectedItem();
 
   if (!selectedItem) {
     previewContent.textContent = 'No preview available.';
@@ -85,61 +79,55 @@ function updatePreview(items) {
     return;
   }
 
-  previewContent.textContent = getPreviewLines(selectedItem.content);
+  const content = getCurrentKind() === 'prompt' ? selectedItem.body : selectedItem.body;
+  previewContent.textContent = getPreviewLines(content);
   copyButton.disabled = false;
 }
 
-function renderItems(items, selectedKind, selectedCategory) {
-  const filteredItems = filterByCategory(filterByKind(items, selectedKind), selectedCategory);
-  const options = filteredItems.map((item) => createOption(item.id, item.title));
+function renderItems() {
+  const kind = getCurrentKind();
+  const categoryId = categorySelect.value;
+  const filtered = getItemsByKind(kind).filter((item) => item.categoryId === categoryId);
 
-  setOptions(itemSelect, options);
+  setOptions(itemSelect, filtered.map((item) => createOption(item.id, item.title)));
 
-  if (filteredItems.length === 0) {
+  if (!filtered.length) {
     previewContent.textContent = 'No items found.';
     copyButton.disabled = true;
     return;
   }
 
-  itemSelect.value = filteredItems[0].id;
-  updatePreview(items);
+  itemSelect.value = filtered[0].id;
+  updatePreview();
 }
 
-function renderCategories(items, selectedKind) {
-  const categories = uniqueValues(filterByKind(items, selectedKind).map((item) => item.category));
-  const options = categories.map((category) => createOption(category, category));
+function renderCategories() {
+  const categories = getCategoriesByKind(getCurrentKind());
+  setOptions(categorySelect, categories.map((category) => createOption(category.id, category.name)));
 
-  setOptions(categorySelect, options);
-
-  if (categories.length === 0) {
+  if (!categories.length) {
     setOptions(itemSelect, []);
-    previewContent.textContent = 'No items found.';
+    previewContent.textContent = 'No categories found. Open dashboard to add data.';
     copyButton.disabled = true;
     return;
   }
 
-  categorySelect.value = categories[0];
-  renderItems(items, selectedKind, categories[0]);
+  categorySelect.value = categories[0].id;
+  renderItems();
 }
 
-function renderKinds(items) {
-  const kinds = uniqueValues(items.map((item) => item.kind));
-  const options = kinds.map((kind) => createOption(kind, kind[0].toUpperCase() + kind.slice(1)));
+function renderKinds() {
+  setOptions(kindSelect, [
+    createOption('prompt', 'Prompt'),
+    createOption('checkpoint', 'Checkpoint')
+  ]);
 
-  setOptions(kindSelect, options);
-
-  if (kinds.length === 0) {
-    previewContent.textContent = 'No items found.';
-    copyButton.disabled = true;
-    return;
-  }
-
-  kindSelect.value = kinds[0];
-  renderCategories(items, kinds[0]);
+  kindSelect.value = 'prompt';
+  renderCategories();
 }
 
-async function copySelectedItem(items) {
-  const selectedItem = getSelectedItem(items);
+async function copySelectedItem() {
+  const selectedItem = getSelectedItem();
 
   if (!selectedItem) {
     setStatus('Nothing selected to copy.', 'error');
@@ -147,7 +135,7 @@ async function copySelectedItem(items) {
   }
 
   try {
-    await navigator.clipboard.writeText(selectedItem.content);
+    await navigator.clipboard.writeText(selectedItem.body);
     setStatus('Copied to clipboard.', 'success');
   } catch (error) {
     console.error(error);
@@ -155,38 +143,41 @@ async function copySelectedItem(items) {
   }
 }
 
-function bindEvents(items) {
+function bindEvents() {
   kindSelect.addEventListener('change', () => {
-    renderCategories(items, kindSelect.value);
+    renderCategories();
     setStatus('', undefined);
   });
 
   categorySelect.addEventListener('change', () => {
-    renderItems(items, kindSelect.value, categorySelect.value);
+    renderItems();
     setStatus('', undefined);
   });
 
   itemSelect.addEventListener('change', () => {
-    updatePreview(items);
+    updatePreview();
     setStatus('', undefined);
   });
 
   copyButton.addEventListener('click', async () => {
-    await copySelectedItem(items);
+    await copySelectedItem();
+  });
+
+  dashboardButton.addEventListener('click', async () => {
+    await chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
   });
 }
 
 async function initPopup() {
   try {
-    const items = await loadSampleData();
-
-    renderKinds(items);
-    bindEvents(items);
+    library = await loadLibrary();
+    renderKinds();
+    bindEvents();
   } catch (error) {
     console.error(error);
-    previewContent.textContent = 'Failed to load sample data.';
+    previewContent.textContent = 'Failed to load prompt library.';
     copyButton.disabled = true;
-    setStatus('Please check extension data files.', 'error');
+    setStatus('Please check extension storage.', 'error');
   }
 }
 

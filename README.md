@@ -1,17 +1,28 @@
 # GPT Prompt Manager
 
-TamperMonkey UserScript for managing ChatGPT prompts and checkpoints
+Prompt manager for ChatGPT workflows, with both:
+- a legacy Tampermonkey userscript interface, and
+- a Manifest V3 browser extension dashboard.
 
 ## Contents
-* Local prompt library manager for ChatGPT, including categories, prompts, and checkpoint storage.
-* Exported prompt libraries.
-* Browser export backups.
+* Local prompt library manager with prompt/checkpoint categories and entries.
+* Browser extension popup for browse/copy workflows.
+* Browser extension standalone dashboard (`dashboard.html`) for editing and saving prompts/checkpoints.
+* Exported prompt libraries and browser backup artifacts.
 
 ## Usage
-1. Install the Tampermonkey browser extension.
-2. Open a `.user.js` file in this repo and install it in Tampermonkey.
-3. Follow the in-script UI prompts to manage and use prompts/checkpoints.
+### Extension
+1. Load the `extension/` folder as an unpacked extension.
+2. Open the extension popup and click **Open Dashboard**.
+3. Manage prompt/checkpoint categories and entries in the dashboard.
+4. Use the popup to browse and copy items.
+
+### Userscript (legacy)
+1. Install Tampermonkey.
+2. Open `GPT_Prompt_Manager.user.js` and install.
+3. Use the in-page tabs to manage prompts/checkpoints.
 
 ## Notes
-* Data is stored locally in Tampermonkey; there is no sync or network communication unless a script explicitly adds it.
-* Exported JSON files are snapshots of your prompt library and can be re-imported.
+* Extension data is stored locally in `chrome.storage.local`.
+* Userscript data is stored locally in Tampermonkey storage.
+* There is no automatic sync between userscript storage and extension storage.
