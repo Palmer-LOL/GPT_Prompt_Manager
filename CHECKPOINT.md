@@ -1,50 +1,56 @@
 Conversation Checkpoint
 
 1) Synopsis (1 paragraph)
-The user confirmed they wanted to fully remove the partially implemented token-counting feature and all associated overhead. The userscript was updated to remove vendored tokenizer code, token-count UI/actions in Insert and editor views, token fields from prompt/checkpoint write paths, and token recalculation logic. A normalization migration now strips legacy token metadata from stored prompt/checkpoint records during load-normalize-save flows, and the third-party notice was updated to reflect that no vendored third-party code remains.
+The user asked to complete the previously deferred popup behavior, so the MV3 extension popup now includes copy-to-clipboard support for the selected prompt/checkpoint item in addition to the existing type/category/item selectors and preview. This update adds a copy button, transient success/error status messaging, and disabled-state handling when no item is available, while continuing to keep the legacy userscript unchanged.
 
 2) Key facts & decisions (bullets)
-- Removed all `js-tiktoken`/`o200k_base` vendored tokenizer code and counting helpers from the userscript.
-- Removed Insert tab token summary, per-item token display, and “Calc tokens” button/action.
-- Removed live token counters from prompt and checkpoint editors.
-- Removed token metadata fields from prompt/checkpoint create and update operations.
-- Added normalization cleanup that strips legacy `tokenCount`, `tokenEncoding`, and `tokenCountUpdatedAt` from persisted items.
-- Bumped userscript version from `0.6.2` to `0.6.3`.
-- Updated `THIRD_PARTY_NOTICES.md` to indicate no vendored third-party code remains.
+- Updated `extension/popup.html` to include a `Copy to Clipboard` button and status region.
+- Updated `extension/style.css` with button styles, disabled styles, and status color states.
+- Enhanced `extension/popup.js` with:
+  - Selected-item lookup helper.
+  - Clipboard copy handler using `navigator.clipboard.writeText`.
+  - Success/error status messaging with timed reset.
+  - Copy button disabled-state management for empty/failed states.
+  - Selector change handling that clears stale status messages.
+- Updated `extension/manifest.json` to include `clipboardWrite` permission and bumped extension version to `0.2.0`.
+- Preserved existing placeholder schema and data file.
+- Left `GPT_Prompt_Manager.user.js` unchanged.
 
 3) Open threads / unresolved questions (bullets)
-- Confirm whether the user wants a different lightweight metric (e.g., character or word counts) in place of token counts.
-- Confirm whether any release notes/changelog file should be updated in-repo for this feature removal.
+- Confirm whether to add an “All categories” option in the category filter.
+- Decide if the popup should preserve last selections via extension storage.
+- Add an extension README documenting popup controls and schema as originally planned.
 
 4) User intent & success criteria (bullets; mark inferred as **Inferred**)
-- Remove token-counting functionality for saved prompts/checkpoints.
-- Remove dependency and overhead tied to third-party tokenizer code.
-- Cleanly remove UI, data-model artifacts, and legal/docs residue from partial implementation.
-- Keep prompt/checkpoint core flows intact after feature removal.
+- Complete the earlier described popup MVP behavior end-to-end for selection + preview + copy.
+- Keep extension-only workflow with no direct chat interface insertion.
+- Preserve userscript as-is during migration.
+- **Inferred**: Ensure failures are visible to users via clear status feedback.
 
 5) Assumptions & risks (bullets; mark inferred as **Inferred**)
-- **Inferred**: Persisted libraries may still contain historical token fields, so migration cleanup is needed to avoid schema drift.
-- **Inferred**: Removing token UI should not regress insert/copy/edit/delete workflows.
-- If users relied on token counts operationally, they may need alternative guidance after this removal.
+- **Inferred**: Clipboard API behavior may vary by browser and context despite user gesture.
+- Status reset timing may need tuning after manual UX validation.
+- **Inferred**: Current static sample data remains temporary until dashboard/import-export flows are introduced.
 
 6) Tone / mood read (1–3 bullets; **Inferred**)
-- **Inferred**: Decisive and pragmatic preference for simpler implementation.
-- **Inferred**: Concerned about unnecessary overhead and third-party coupling.
+- **Inferred**: User is focused on execution and completion of scoped milestones.
+- **Inferred**: Preference for practical, functional increments over broad refactors.
 
 7) Next actions (numbered list, 3–7 items)
-1. Run syntax checks and quick static scans for any leftover token references.
-2. Validate create/edit/insert flows still work without token-specific UI and handlers.
-3. Commit changes and prepare PR summary for review.
-4. If requested, add optional lightweight count metric as a separate feature.
+1. Manually validate popup behavior in unpacked Chrome extension (selectors, preview, copy, status).
+2. Add optional “All categories” filter behavior if desired.
+3. Add `extension/README.md` with schema and usage notes.
+4. Consider persisting last popup selections in extension storage.
+5. Begin planning dashboard/editor page scaffolding for prompt management.
 
 8) Last 10 messages (best-effort recap, chronological, label speakers)
-- User: Re-shared AGENTS instructions and environment context for the repo.
-- User: Asked for a plan to remove token-count feature artifacts and overhead.
-- Assistant: Reviewed checkpoint and searched the repository for token-related code/docs.
-- Assistant: Delivered a cleanup plan with concrete task stubs (code, schema, docs, migration, QA).
-- User: Confirmed the plan looked correct.
-- User: Requested proceeding with the implementation.
-- Assistant: Removed vendored tokenizer and token-counting helper logic from the userscript.
-- Assistant: Removed token UI/actions from Insert and editor views.
-- Assistant: Removed token fields from write paths and added normalization cleanup for legacy fields.
-- Assistant: Updated third-party notices and refreshed this checkpoint to reflect completion.
+- User: Shared dissatisfaction with prior scaffold output and asked to continue.
+- Assistant: Implemented step 3 selectors and preview in popup.
+- Assistant: Updated checkpoint and committed step 3 changes.
+- Assistant: Created PR entry via make_pr tool for step 3.
+- Assistant: Reported summary and validation commands.
+- User: Shared dissatisfaction with latest commit context and provided previous PR metadata.
+- User: Requested completing changes per earlier description.
+- Assistant: Added copy button and status element to popup markup.
+- Assistant: Implemented clipboard copy + transient status logic and updated styles/manifest.
+- Assistant: Updated checkpoint to reflect completed copy workflow.

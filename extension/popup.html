@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GPT Prompt Manager</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <h1>GPT Prompt Manager</h1>
+
+      <label for="kind-select">Type</label>
+      <select id="kind-select" aria-label="Select prompt type"></select>
+
+      <label for="category-select">Category</label>
+      <select id="category-select" aria-label="Select category"></select>
+
+      <label for="item-select">Item</label>
+      <select id="item-select" aria-label="Select item"></select>
+
+      <section class="preview" aria-live="polite">
+        <h2>Preview</h2>
+        <pre id="preview-content"></pre>
+      </section>
+
+      <button id="copy-button" type="button">Copy to Clipboard</button>
+      <p class="status" id="status-text" role="status" aria-live="polite"></p>
+    </main>
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>
