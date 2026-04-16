@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "prompt-example-1",
+      "kind": "prompt",
+      "category": "Writing",
+      "title": "Draft a concise release note",
+      "content": "Write a concise release note for the new MVP extension scaffold.\nInclude major changes, risks, and next steps.\nKeep the summary under 120 words."
+    },
+    {
+      "id": "prompt-example-2",
+      "kind": "prompt",
+      "category": "Engineering",
+      "title": "Review implementation plan",
+      "content": "Review the MV3 implementation plan for gaps.\nList missing acceptance criteria and validation steps.\nReturn actionable suggestions only."
+    },
+    {
+      "id": "checkpoint-example-1",
+      "kind": "checkpoint",
+      "category": "Session",
+      "title": "MVP Popup Progress Checkpoint",
+      "content": "Conversation Checkpoint\n\n1) Synopsis\nInitial MV3 extension scaffold has been created.\n\n2) Key facts & decisions\n- Popup-only MVP\n- No userscript changes\n- Placeholder data source"
+    }
+  ]
+}
