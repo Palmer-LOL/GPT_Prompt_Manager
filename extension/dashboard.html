@@ -13,98 +13,66 @@
         <p id="save-status" class="save-status" aria-live="polite"></p>
       </header>
 
-      <nav class="tabs" aria-label="Dashboard sections">
-        <button id="tab-prompts" class="tab tab--active" type="button">Prompts</button>
-        <button id="tab-checkpoints" class="tab" type="button">Checkpoints</button>
-      </nav>
-
-      <section id="panel-prompts" class="panel panel--active">
-        <div class="panel-grid">
+      <section class="workspace">
+        <div class="panel-grid panel-grid--compact">
           <section class="card">
-            <h2>Prompt Categories</h2>
-            <ul id="prompt-categories" class="list"></ul>
-            <div class="inline-form">
-              <input id="prompt-category-name" type="text" placeholder="New category name" />
-              <button id="prompt-category-add" type="button">Add</button>
+            <h2>Library Controls</h2>
+            <div class="form-grid">
+              <label for="editor-mode">Mode</label>
+              <select id="editor-mode">
+                <option value="prompts">Prompts</option>
+                <option value="checkpoints">Checkpoints</option>
+              </select>
+
+              <label for="category-select">Category</label>
+              <select id="category-select"></select>
+
+              <div class="inline-form">
+                <input id="category-name" type="text" placeholder="Category name" />
+                <button id="category-add" type="button">Add</button>
+              </div>
+
+              <div class="actions actions--wrap">
+                <button id="category-rename" type="button">Rename</button>
+                <button id="category-position" type="button">Set Position</button>
+                <button id="category-delete" type="button">Delete</button>
+              </div>
+
+              <label for="item-select">Saved Items</label>
+              <select id="item-select"></select>
+
+              <div class="actions actions--wrap">
+                <button id="item-new" type="button">New</button>
+                <button id="item-edit" type="button">Edit</button>
+                <button id="item-delete" type="button">Delete</button>
+              </div>
             </div>
           </section>
 
           <section class="card">
-            <h2>Prompts</h2>
-            <ul id="prompt-items" class="list"></ul>
-            <button id="prompt-new" type="button">New Prompt</button>
-          </section>
-
-          <section class="card">
-            <h2>Prompt Editor</h2>
+            <h2 id="editor-title">Prompt Editor</h2>
             <div class="form-grid">
-              <label for="prompt-editor-category">Category</label>
-              <select id="prompt-editor-category"></select>
+              <label for="item-editor-category">Category</label>
+              <select id="item-editor-category"></select>
 
-              <label for="prompt-editor-title">Title</label>
-              <input id="prompt-editor-title" type="text" placeholder="Prompt title" />
+              <label for="item-editor-title">Title</label>
+              <input id="item-editor-title" type="text" placeholder="Title" />
 
-              <label for="prompt-editor-description">Description</label>
-              <input id="prompt-editor-description" type="text" placeholder="Short description" />
+              <label for="item-editor-description">Description</label>
+              <input id="item-editor-description" type="text" placeholder="Short description" />
 
-              <label for="prompt-editor-body">Body</label>
-              <textarea id="prompt-editor-body" rows="12" placeholder="Prompt body"></textarea>
+              <label for="item-editor-body">Body</label>
+              <textarea id="item-editor-body" rows="12" placeholder="Body"></textarea>
 
-              <label for="prompt-editor-position">Position</label>
-              <input id="prompt-editor-position" type="number" min="1" step="1" placeholder="1" />
+              <label for="item-editor-position">Position</label>
+              <input id="item-editor-position" type="number" min="1" step="1" placeholder="1" />
 
-              <label for="prompt-editor-saved-at">Last Saved</label>
-              <input id="prompt-editor-saved-at" type="text" readonly />
+              <label for="item-editor-saved-at">Last Saved</label>
+              <input id="item-editor-saved-at" type="text" readonly />
             </div>
             <div class="actions">
-              <button id="prompt-save" type="button">Save Prompt</button>
-              <button id="prompt-cancel" type="button" class="btn-secondary">Cancel</button>
-            </div>
-          </section>
-        </div>
-      </section>
-
-      <section id="panel-checkpoints" class="panel">
-        <div class="panel-grid">
-          <section class="card">
-            <h2>Checkpoint Categories</h2>
-            <ul id="checkpoint-categories" class="list"></ul>
-            <div class="inline-form">
-              <input id="checkpoint-category-name" type="text" placeholder="New category name" />
-              <button id="checkpoint-category-add" type="button">Add</button>
-            </div>
-          </section>
-
-          <section class="card">
-            <h2>Checkpoints</h2>
-            <ul id="checkpoint-items" class="list"></ul>
-            <button id="checkpoint-new" type="button">New Checkpoint</button>
-          </section>
-
-          <section class="card">
-            <h2>Checkpoint Editor</h2>
-            <div class="form-grid">
-              <label for="checkpoint-editor-category">Category</label>
-              <select id="checkpoint-editor-category"></select>
-
-              <label for="checkpoint-editor-title">Title</label>
-              <input id="checkpoint-editor-title" type="text" placeholder="Checkpoint title" />
-
-              <label for="checkpoint-editor-description">Description</label>
-              <input id="checkpoint-editor-description" type="text" placeholder="Short description" />
-
-              <label for="checkpoint-editor-body">Body</label>
-              <textarea id="checkpoint-editor-body" rows="10" placeholder="Checkpoint body"></textarea>
-
-              <label for="checkpoint-editor-position">Position</label>
-              <input id="checkpoint-editor-position" type="number" min="1" step="1" placeholder="1" />
-
-              <label for="checkpoint-editor-saved-at">Last Saved</label>
-              <input id="checkpoint-editor-saved-at" type="text" readonly />
-            </div>
-            <div class="actions">
-              <button id="checkpoint-save" type="button">Save Checkpoint</button>
-              <button id="checkpoint-cancel" type="button" class="btn-secondary">Cancel</button>
+              <button id="item-save" type="button">Save Prompt</button>
+              <button id="item-cancel" type="button" class="btn-secondary">Cancel</button>
             </div>
           </section>
         </div>

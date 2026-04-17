@@ -1,54 +1,54 @@
 Conversation Checkpoint
 
 1) Synopsis (1 paragraph)
-After implementing item-level position ordering and checkpoint Last Saved parity, the user requested category numeric positioning too. The dashboard now applies numeric positions to categories (prompts and checkpoints) with deterministic placement via a "Set Pos" action, and category lists render sorted by `position` with position metadata shown. Storage normalization was extended so categories and checkpoint categories also persist and repair `position` values, including legacy migration paths. Manifest version was incremented to `0.3.5` for this follow-up incremental UX/storage update.
+The user requested the next major UX consolidation step: move from separate prompt/checkpoint panels to one shared editor and replace cluttered lists with dropdown selectors. The dashboard now uses a single mode dropdown to switch between prompts and checkpoints, one unified editor form, and compact category/item dropdown controls plus contextual actions (add/rename/set-position/delete category; new/edit/delete item). Existing position-based ordering behavior for categories/items remains and is surfaced in dropdown labels. The manifest version was bumped to `0.3.6`.
 
 2) Key facts & decisions (bullets)
-- Added category position handling in dashboard logic with shared helpers: sorted category retrieval, category position normalization, and category placement by requested numeric position.
-- Replaced category up/down controls with a numeric position workflow (`Set Pos` prompt) to align category behavior with position-based item ordering.
-- Category list UI now displays each category's current numeric position in item metadata.
-- Category creation now assigns append-style default positions (`length + 1`) and deletion re-sequences remaining category positions.
-- Editor category dropdowns and initial selected category defaults now use position-sorted categories.
-- Updated storage defaults so categories/checkpointCategories include `position` values.
-- Updated storage normalization to parse, repair, and canonicalize category positions for both category buckets.
-- Bumped manifest version from `0.3.4` to `0.3.5`.
+- Replaced dual tab/panel dashboard layout with a single workspace in `extension/dashboard.html`.
+- Added mode selector (`#editor-mode`) and dropdown-based selectors for categories/items (`#category-select`, `#item-select`).
+- Consolidated editor UI into one shared form (`#item-editor-*`) with mode-specific save/new labeling.
+- Added compact action rows for category and item management to reduce list clutter.
+- Rewrote `extension/dashboard.js` around one active mode state with per-mode selection/editing state maps.
+- Preserved and reused deterministic position logic for categories/items (`placeCategoryAtPosition`, `placeItemAtPosition`, normalization helpers).
+- Updated `extension/dashboard.css` to style the new single-workspace layout and wrapped action rows.
+- Bumped extension manifest version from `0.3.5` to `0.3.6`.
 - No third-party dependencies were added.
 
 3) Open threads / unresolved questions (bullets)
-- Decide whether category position input should move from prompt-based interaction (`Set Pos`) into a dedicated field/control in the UI.
-- Decide whether to show more compact ordering labels (for example, `#3`) across category and item rows for readability.
-- Continue with planned next phase: unify two-tab UI into one mode-dropdown editor surface.
+- Decide whether category/item position editing should remain prompt-driven (`Set Position`) or move inline into dedicated controls.
+- Decide whether dropdown option labels should include saved timestamp or only position/title for readability.
+- Determine if category add UX should be inline-only or split into explicit “Create Category” modal/flow for discoverability.
 
 4) User intent & success criteria (bullets; mark inferred as **Inferred**)
-- Apply numeric position behavior to categories as a follow-up to item positioning.
-- Keep incremental implementation approach and avoid risky broad rewrites.
-- Maintain deterministic ordering and persistence across loads for both categories and items.
-- **Inferred**: Preserve existing workflow familiarity while improving reorder speed.
+- Implement one shared editor for prompts/checkpoints controlled by a mode dropdown.
+- Replace cluttered category/item lists with dropdown selectors for cleaner interface.
+- Keep mode-specific semantics clear to avoid cross-mode save confusion.
+- **Inferred**: Preserve existing data model and deterministic ordering while simplifying visual complexity.
 
 5) Assumptions & risks (bullets; mark inferred as **Inferred**)
-- Prompt-based category position entry is acceptable short term, though less discoverable than inline controls.
-- **Inferred**: Replacing up/down controls may affect users expecting click-step movement; metadata display should mitigate ambiguity.
-- **Inferred**: Position normalization must continue to handle malformed legacy data without dropping valid entities.
-- **Inferred**: Next UI consolidation phase should be isolated to reduce regression risk after ordering model changes.
+- Users will accept dropdown + action-button workflows replacing visible list rows.
+- **Inferred**: Reduced visual density may improve clarity but could hide discoverability of some actions (rename/set-position/delete).
+- **Inferred**: Large JS rewrite of dashboard interactions carries regression risk in CRUD/selection flows and should be manually validated.
+- **Inferred**: Prompt-based position dialogs remain serviceable short-term but may warrant inline numeric inputs later.
 
 6) Tone / mood read (1–3 bullets; **Inferred**)
-- **Inferred**: User is highly engaged and quickly validating incremental UX decisions.
-- **Inferred**: User prefers practical consistency across related controls (items and categories).
+- **Inferred**: User is forward-moving and focused on achieving the planned UX milestones.
+- **Inferred**: Priority is practical simplification over preserving prior layout.
 
 7) Next actions (numbered list, 3–7 items)
-1. Manually validate category position edits in both tabs, including clamped out-of-range values.
-2. Verify combined behavior when reordering categories and items then reloading storage-backed data.
-3. Implement planned mode-dropdown consolidation for prompt/checkpoint editor surface.
-4. Plan dropdown conversion for category/item selectors after mode consolidation stabilizes.
+1. Manually validate mode switching and ensure category/item selections are isolated per mode.
+2. Validate full CRUD flows for categories/items in both modes with persisted reload behavior.
+3. Evaluate whether to replace prompt-based “Set Position” with inline numeric controls.
+4. Add lightweight regression tests around ordering/selection helpers if test harness is introduced.
 
 8) Last 10 messages (best-effort recap, chronological, label speakers)
-- User: Reported dissatisfaction with prior code and requested positioning field + Last Saved parity next.
-- Assistant: Implemented item position ordering, checkpoint Last Saved parity, storage normalization updates, version bump, checkpoint update, commit, and PR metadata.
-- User: Clarified follow-up that categories also need numeric positions.
-- Assistant: Re-read repository context and implemented category-position logic in dashboard state/render/event flow.
-- Assistant: Replaced category up/down controls with `Set Pos` action and position metadata display.
-- Assistant: Updated category add/delete flows to maintain contiguous positions.
-- Assistant: Extended storage defaults and normalization to include category positions.
-- Assistant: Bumped manifest version to `0.3.5`.
-- Assistant: Ran syntax checks for updated JavaScript files.
-- Assistant: Updated checkpoint with this follow-up change and prepared commit/PR workflow.
+- User: Requested category numeric positions as follow-up to item positioning.
+- Assistant: Implemented category positioning in dashboard + storage normalization, bumped manifest, updated checkpoint, committed, and prepared PR metadata.
+- User: Requested next step to consolidate into one editor and implement dropdowns to clean interface.
+- Assistant: Re-read context and proceeded with single-editor + dropdown redesign.
+- Assistant: Replaced dashboard HTML with one unified workspace, mode dropdown, and compact control layout.
+- Assistant: Rewrote dashboard JS to a single active-mode editor flow with per-mode state maps and dropdown rendering.
+- Assistant: Preserved category/item positioning logic and adapted it to the unified workflow.
+- Assistant: Updated dashboard CSS for compact two-card workspace and wrapped action rows.
+- Assistant: Bumped manifest to `0.3.6`.
+- Assistant: Updated checkpoint and prepared commit/PR workflow for this UX consolidation step.

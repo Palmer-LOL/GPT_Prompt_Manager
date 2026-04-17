@@ -38,38 +38,18 @@ h2 {
   color: #2e7d32;
 }
 
-.tabs {
-  display: flex;
-  gap: 8px;
+.workspace {
   margin-top: 16px;
-}
-
-.tab {
-  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
-  border-radius: 8px;
-  background: transparent;
-  cursor: pointer;
-  font-weight: 700;
-  padding: 8px 12px;
-}
-
-.tab--active {
-  background: color-mix(in srgb, currentColor 15%, transparent);
-}
-
-.panel {
-  display: none;
-  margin-top: 14px;
-}
-
-.panel--active {
-  display: block;
 }
 
 .panel-grid {
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(240px, 1fr) minmax(280px, 1fr) minmax(420px, 2fr);
+}
+
+.panel-grid--compact {
+  grid-template-columns: minmax(280px, 1fr) minmax(500px, 2fr);
 }
 
 .card {
@@ -172,6 +152,10 @@ textarea {
   margin-top: 10px;
   display: flex;
   gap: 8px;
+}
+
+.actions--wrap {
+  flex-wrap: wrap;
 }
 
 .empty {
