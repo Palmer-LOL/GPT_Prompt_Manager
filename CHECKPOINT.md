@@ -1,59 +1,49 @@
 Conversation Checkpoint
 
 1) Synopsis (1 paragraph)
-The user approved the dashboard implementation direction and requested execution with three explicit decisions: standalone `dashboard.html`, ordering controls included, and popup limited to browse/copy. The extension now includes a new standalone dashboard page with prompt and checkpoint management (including category and item ordering), a shared storage module backed by `chrome.storage.local`, and popup integration to open the dashboard while reading from the shared library model.
+A follow-up PR review flagged timestamp drift for migrated legacy prompts: `normalizeLibrary` generated a fresh `savedAt` on each load when missing, but the migrated value was not persisted. This update modifies `loadLibrary` to persist normalized data back to storage whenever normalization changes the payload, which stabilizes generated prompt timestamps after first migration. The extension manifest version was incremented to `0.3.2` for this fix-only patch.
 
 2) Key facts & decisions (bullets)
-- Added `extension/dashboard.html`, `extension/dashboard.css`, and `extension/dashboard.js` for standalone dashboard UX.
-- Added `extension/lib/storage.js` as canonical library schema and storage adapter.
-- Updated popup to remain browse/copy-only while adding an `Open Dashboard` button.
-- Popup data source now uses shared extension storage schema (`categories/prompts/checkpointCategories/checkpoints`) instead of static sample-item shape.
-- Implemented ordering controls (up/down) for:
-  - prompt categories
-  - prompts within a category
-  - checkpoint categories
-  - checkpoints within a category
-- Updated extension manifest version to `0.3.0` and added required permissions for storage and dashboard tab opening.
-- Updated README to document extension dashboard workflow and userscript/extension storage separation.
+- `loadLibrary` now computes `normalized = normalizeLibrary(raw)` and writes it back to `chrome.storage.local` when `raw` differs.
+- This persistence step prevents migrated `prompt.savedAt` values from being regenerated every dashboard load.
+- The fix also persists any other normalization cleanups produced during load.
+- Extension manifest version bumped from `0.3.1` to `0.3.2`.
+- No third-party dependencies were added.
 
 3) Open threads / unresolved questions (bullets)
-- Decide whether to keep `tabs` permission or remove it if unnecessary for `chrome.tabs.create` in this environment.
-- Decide whether to add import/export/reset controls to the dashboard to mirror userscript manager settings.
-- Determine if an automated migration/import path from userscript JSON should be included in extension UI.
+- Confirm whether checkpoint entries should receive the same migration/audit treatment in UI copy for historical accuracy messaging.
+- Decide whether deep equality for migration persistence should move to a dedicated helper for readability and future testability.
+- Decide whether prompt/checkpoint editor consolidation remains the next incremental UX scope.
 
 4) User intent & success criteria (bullets; mark inferred as **Inferred**)
-- Implement a standalone extension dashboard page for prompt/checkpoint management.
-- Add popup button to open dashboard.
-- Keep popup behavior limited to browse/copy functionality.
-- Include ordering controls for categories and entries.
-- Preserve core capabilities: view, edit, create, and save prompts/checkpoints and manage categories for both types.
-- **Inferred**: Keep implementation lightweight, deterministic, and free of third-party dependencies.
+- Address PR feedback at `extension/lib/storage.js` regarding drifting migrated prompt timestamps.
+- Ensure legacy prompts missing `savedAt` gain a stable persisted timestamp after migration.
+- Keep the change minimal and aligned with current storage architecture.
+- **Inferred**: Avoid introducing behavior changes beyond timestamp stabilization and normalization persistence.
 
 5) Assumptions & risks (bullets; mark inferred as **Inferred**)
-- **Inferred**: Users will accept extension storage as independent from Tampermonkey storage.
-- Popup no longer references `sample-prompts.json`; stale sample file may cause confusion unless cleaned up/documented.
-- **Inferred**: Large libraries may need future UX improvements (search/filter/pagination) in dashboard lists.
-- **Inferred**: `new Date().toLocaleString()` checkpoint display is locale-dependent and may vary by browser settings.
+- Using `JSON.stringify` comparison is acceptable for current plain-object library structures.
+- **Inferred**: Future key-order or non-serializable fields could make stringify-based comparison less robust.
+- The first migration still assigns a generated timestamp when historical values are absent; this remains an approximation.
 
 6) Tone / mood read (1–3 bullets; **Inferred**)
-- **Inferred**: User is decisive and collaborative, quickly confirming design choices.
-- **Inferred**: User prefers progress over prolonged planning once direction is aligned.
+- **Inferred**: Feedback is practical and correctness-focused.
+- **Inferred**: Priority is eliminating misleading UX signals with minimal churn.
 
 7) Next actions (numbered list, 3–7 items)
-1. Run static validation checks for updated JS/JSON files.
-2. Manually verify popup and dashboard flows in unpacked extension (CRUD + ordering + copy).
-3. Capture a dashboard screenshot artifact if browser tooling is available.
-4. Commit changes and generate PR message.
-5. Optionally add dashboard import/export/reset in next increment.
+1. Run quick sanity checks for modified extension files.
+2. Commit timestamp migration persistence fix and manifest bump.
+3. Prepare PR summary describing the bug and stabilization behavior.
+4. Track optional follow-up to refactor normalization-diff detection helper.
 
 8) Last 10 messages (best-effort recap, chronological, label speakers)
-- Assistant: Implemented popup copy support and status handling in prior step.
-- Assistant: Updated checkpoint for copy workflow completion.
-- User: Requested implementation plan for dashboard with popup entry and settings parity.
-- Assistant: Provided phased implementation plan and open decisions.
-- Assistant: Reported repository inspection commands used during planning.
-- User: Approved plan and confirmed decisions: standalone dashboard, ordering controls, popup browse/copy only.
-- User: Requested proceeding with implementation.
-- Assistant: Added shared storage module for canonical extension library schema.
-- Assistant: Created standalone dashboard files and implemented prompt/checkpoint CRUD with ordering.
-- Assistant: Updated popup, manifest, README, and checkpoint to align with requested direction.
+- User: Provided AGENTS instructions requiring checkpoint usage and updates for all repo changes.
+- User: Sent PR follow-up trigger to address review feedback on `extension/lib/storage.js` line 99.
+- User: Included PR metadata describing schema-alignment changes and current branch state.
+- User: Included reviewer comment noting migrated prompt `savedAt` drift when reopening dashboard.
+- User: Included Codex automated review context comment.
+- Assistant: Read repository instructions and current checkpoint for continuity.
+- Assistant: Inspected `extension/lib/storage.js` around the referenced line and validated the drift issue.
+- Assistant: Implemented `loadLibrary` persistence of normalized data when raw data differs.
+- Assistant: Bumped manifest version to `0.3.2` per repository convention.
+- Assistant: Updated checkpoint to capture this follow-up fix and remaining decisions.

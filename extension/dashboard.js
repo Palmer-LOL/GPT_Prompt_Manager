@@ -26,7 +26,9 @@ const el = {
   promptNew: document.querySelector('#prompt-new'),
   promptEditorCategory: document.querySelector('#prompt-editor-category'),
   promptEditorTitle: document.querySelector('#prompt-editor-title'),
+  promptEditorDescription: document.querySelector('#prompt-editor-description'),
   promptEditorBody: document.querySelector('#prompt-editor-body'),
+  promptEditorSavedAt: document.querySelector('#prompt-editor-saved-at'),
   promptSave: document.querySelector('#prompt-save'),
   promptCancel: document.querySelector('#prompt-cancel'),
 
@@ -265,8 +267,10 @@ function renderPromptItems() {
       renderPrompts();
     });
 
+    const savedAt = new Date(promptItem.savedAt).toLocaleString();
     el.promptItems.appendChild(createListItem({
       label: promptItem.title,
+      meta: `Saved ${savedAt}`,
       selected: state.selectedPromptId === promptItem.id,
       controls: [selectButton, editButton, upButton, downButton, deleteButton]
     }));
@@ -289,12 +293,16 @@ function renderPromptEditor() {
   const selectedCategory = editing?.categoryId || state.selectedPromptCategoryId || categories[0]?.id || '';
   el.promptEditorCategory.disabled = categories.length === 0;
   el.promptEditorTitle.disabled = categories.length === 0;
+  el.promptEditorDescription.disabled = categories.length === 0;
   el.promptEditorBody.disabled = categories.length === 0;
+  el.promptEditorSavedAt.disabled = true;
   el.promptSave.disabled = categories.length === 0;
 
   el.promptEditorCategory.value = selectedCategory;
   el.promptEditorTitle.value = editing?.title || '';
+  el.promptEditorDescription.value = editing?.description || '';
   el.promptEditorBody.value = editing?.body || '';
+  el.promptEditorSavedAt.value = editing?.savedAt ? new Date(editing.savedAt).toLocaleString() : 'Not saved yet';
 }
 
 function renderPrompts() {
@@ -485,7 +493,9 @@ function bindPromptEvents() {
   el.promptNew.addEventListener('click', () => {
     state.editingPromptId = null;
     el.promptEditorTitle.value = '';
+    el.promptEditorDescription.value = '';
     el.promptEditorBody.value = '';
+    el.promptEditorSavedAt.value = 'Not saved yet';
     if (state.selectedPromptCategoryId) {
       el.promptEditorCategory.value = state.selectedPromptCategoryId;
     }
@@ -494,6 +504,7 @@ function bindPromptEvents() {
   el.promptSave.addEventListener('click', async () => {
     const categoryId = el.promptEditorCategory.value;
     const title = el.promptEditorTitle.value.trim();
+    const description = el.promptEditorDescription.value.trim();
     const body = el.promptEditorBody.value;
 
     if (!categoryId) {
@@ -514,10 +525,19 @@ function bindPromptEvents() {
       } else {
         editing.categoryId = categoryId;
         editing.title = title;
+        editing.description = description;
         editing.body = body;
+        editing.savedAt = new Date().toISOString();
       }
     } else {
-      state.library.prompts.push({ id: createId('prompt'), categoryId, title, body });
+      state.library.prompts.push({
+        id: createId('prompt'),
+        categoryId,
+        title,
+        description,
+        body,
+        savedAt: new Date().toISOString()
+      });
     }
 
     state.selectedPromptCategoryId = categoryId;

@@ -10,13 +10,17 @@ const DEFAULT_LIBRARY = {
       id: 'prompt_release_note',
       categoryId: 'cat_writing',
       title: 'Draft a concise release note',
-      body: 'Write a concise release note for the new extension milestone. Include changes, risks, and next steps in under 120 words.'
+      description: 'Template for concise release communication.',
+      body: 'Write a concise release note for the new extension milestone. Include changes, risks, and next steps in under 120 words.',
+      savedAt: new Date().toISOString()
     },
     {
       id: 'prompt_plan_review',
       categoryId: 'cat_engineering',
       title: 'Review implementation plan',
-      body: 'Review this implementation plan for missing acceptance criteria and validation steps. Return actionable suggestions only.'
+      description: 'Checklist-style review prompt for implementation plans.',
+      body: 'Review this implementation plan for missing acceptance criteria and validation steps. Return actionable suggestions only.',
+      savedAt: new Date().toISOString()
     }
   ],
   checkpointCategories: [
@@ -90,7 +94,9 @@ export function normalizeLibrary(library) {
       id: String(prompt.id),
       categoryId: String(prompt.categoryId),
       title: String(prompt.title || '').trim(),
-      body: String(prompt.body || '')
+      description: String(prompt.description || '').trim(),
+      body: String(prompt.body || ''),
+      savedAt: String(prompt.savedAt || new Date().toISOString())
     }))
     .filter((prompt) => prompt.title);
 
@@ -138,7 +144,13 @@ export async function loadLibrary() {
     return seed;
   }
 
-  return normalizeLibrary(raw);
+  const normalized = normalizeLibrary(raw);
+  if (JSON.stringify(raw) !== JSON.stringify(normalized)) {
+    await chrome.storage.local.set({
+      [STORAGE_KEY_LIBRARY]: normalized
+    });
+  }
+  return normalized;
 }
 
 export async function saveLibrary(library) {
