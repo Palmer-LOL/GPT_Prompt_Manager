@@ -2,13 +2,14 @@ export const STORAGE_KEY_LIBRARY = 'gpm_library_v1';
 
 const DEFAULT_LIBRARY = {
   categories: [
-    { id: 'cat_writing', name: 'Writing' },
-    { id: 'cat_engineering', name: 'Engineering' }
+    { id: 'cat_writing', name: 'Writing', position: 1 },
+    { id: 'cat_engineering', name: 'Engineering', position: 2 }
   ],
   prompts: [
     {
       id: 'prompt_release_note',
       categoryId: 'cat_writing',
+      position: 1,
       title: 'Draft a concise release note',
       description: 'Template for concise release communication.',
       body: 'Write a concise release note for the new extension milestone. Include changes, risks, and next steps in under 120 words.',
@@ -17,6 +18,7 @@ const DEFAULT_LIBRARY = {
     {
       id: 'prompt_plan_review',
       categoryId: 'cat_engineering',
+      position: 1,
       title: 'Review implementation plan',
       description: 'Checklist-style review prompt for implementation plans.',
       body: 'Review this implementation plan for missing acceptance criteria and validation steps. Return actionable suggestions only.',
@@ -24,12 +26,13 @@ const DEFAULT_LIBRARY = {
     }
   ],
   checkpointCategories: [
-    { id: 'cp_cat_session', name: 'Session' }
+    { id: 'cp_cat_session', name: 'Session', position: 1 }
   ],
   checkpoints: [
     {
       id: 'cp_mvp_progress',
       categoryId: 'cp_cat_session',
+      position: 1,
       title: 'MVP Progress Checkpoint',
       description: 'Current implementation status for extension migration work.',
       body: 'Conversation Checkpoint\n\n1) Synopsis\nExtension popup supports browse and copy behavior.\n\n2) Key facts & decisions\n- Popup is browse/copy only\n- Dashboard owns editing workflows',
@@ -73,44 +76,93 @@ export function normalizeLibrary(library) {
     return base;
   }
 
-  const categories = uniqueById(Array.isArray(library.categories) ? library.categories : []).map((category) => ({
-    id: String(category.id),
-    name: String(category.name || category.id).trim()
-  }));
+  const normalizePositionedCategories = (inputCategories) => {
+    const normalized = uniqueById(Array.isArray(inputCategories) ? inputCategories : []).map((category, index) => {
+      const parsedPosition = Number.parseInt(category.position, 10);
+      return {
+        id: String(category.id),
+        name: String(category.name || category.id).trim(),
+        position: Number.isFinite(parsedPosition) && parsedPosition > 0 ? parsedPosition : null,
+        __index: index
+      };
+    });
 
-  const checkpointCategories = uniqueById(
-    Array.isArray(library.checkpointCategories) ? library.checkpointCategories : []
-  ).map((category) => ({
-    id: String(category.id),
-    name: String(category.name || category.id).trim()
-  }));
+    const ordered = [...normalized].sort((a, b) => {
+      const aPosition = a.position ?? Number.MAX_SAFE_INTEGER;
+      const bPosition = b.position ?? Number.MAX_SAFE_INTEGER;
+      if (aPosition === bPosition) {
+        return a.__index - b.__index;
+      }
+      return aPosition - bPosition;
+    });
+
+    const positionById = new Map();
+    ordered.forEach((category, index) => {
+      positionById.set(category.id, index + 1);
+    });
+
+    return normalized.map(({ __index, ...category }) => ({
+      ...category,
+      position: positionById.get(category.id) || 1
+    }));
+  };
+
+  const categories = normalizePositionedCategories(library.categories);
+  const checkpointCategories = normalizePositionedCategories(library.checkpointCategories);
 
   const categoryIds = new Set(categories.map((category) => category.id));
   const checkpointCategoryIds = new Set(checkpointCategories.map((category) => category.id));
 
-  const prompts = uniqueById(Array.isArray(library.prompts) ? library.prompts : [])
-    .filter((prompt) => typeof prompt.categoryId === 'string' && categoryIds.has(prompt.categoryId))
-    .map((prompt) => ({
-      id: String(prompt.id),
-      categoryId: String(prompt.categoryId),
-      title: String(prompt.title || '').trim(),
-      description: String(prompt.description || '').trim(),
-      body: String(prompt.body || ''),
-      savedAt: String(prompt.savedAt || new Date().toISOString())
-    }))
-    .filter((prompt) => prompt.title);
+  const normalizePositionedItems = (inputItems, validCategoryIds) => {
+    const normalizedItems = uniqueById(Array.isArray(inputItems) ? inputItems : [])
+      .filter((item) => typeof item.categoryId === 'string' && validCategoryIds.has(item.categoryId))
+      .map((item, index) => {
+        const parsedPosition = Number.parseInt(item.position, 10);
+        return {
+          id: String(item.id),
+          categoryId: String(item.categoryId),
+          title: String(item.title || '').trim(),
+          description: String(item.description || '').trim(),
+          body: String(item.body || ''),
+          savedAt: String(item.savedAt || new Date().toISOString()),
+          position: Number.isFinite(parsedPosition) && parsedPosition > 0 ? parsedPosition : null,
+          __index: index
+        };
+      })
+      .filter((item) => item.title);
 
-  const checkpoints = uniqueById(Array.isArray(library.checkpoints) ? library.checkpoints : [])
-    .filter((checkpoint) => typeof checkpoint.categoryId === 'string' && checkpointCategoryIds.has(checkpoint.categoryId))
-    .map((checkpoint) => ({
-      id: String(checkpoint.id),
-      categoryId: String(checkpoint.categoryId),
-      title: String(checkpoint.title || '').trim(),
-      description: String(checkpoint.description || '').trim(),
-      body: String(checkpoint.body || ''),
-      savedAt: String(checkpoint.savedAt || new Date().toISOString())
-    }))
-    .filter((checkpoint) => checkpoint.title);
+    const itemsByCategory = new Map();
+    normalizedItems.forEach((item) => {
+      if (!itemsByCategory.has(item.categoryId)) {
+        itemsByCategory.set(item.categoryId, []);
+      }
+      itemsByCategory.get(item.categoryId).push(item);
+    });
+
+    const positionById = new Map();
+    itemsByCategory.forEach((items) => {
+      items
+        .sort((a, b) => {
+          const aPosition = a.position ?? Number.MAX_SAFE_INTEGER;
+          const bPosition = b.position ?? Number.MAX_SAFE_INTEGER;
+          if (aPosition === bPosition) {
+            return a.__index - b.__index;
+          }
+          return aPosition - bPosition;
+        })
+        .forEach((item, index) => {
+          positionById.set(item.id, index + 1);
+        });
+    });
+
+    return normalizedItems.map(({ __index, ...item }) => ({
+      ...item,
+      position: positionById.get(item.id) || 1
+    }));
+  };
+
+  const prompts = normalizePositionedItems(library.prompts, categoryIds);
+  const checkpoints = normalizePositionedItems(library.checkpoints, checkpointCategoryIds);
 
   return {
     categories,

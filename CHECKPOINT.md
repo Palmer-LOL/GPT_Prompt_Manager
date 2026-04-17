@@ -1,49 +1,54 @@
 Conversation Checkpoint
 
 1) Synopsis (1 paragraph)
-A follow-up PR review flagged timestamp drift for migrated legacy prompts: `normalizeLibrary` generated a fresh `savedAt` on each load when missing, but the migrated value was not persisted. This update modifies `loadLibrary` to persist normalized data back to storage whenever normalization changes the payload, which stabilizes generated prompt timestamps after first migration. The extension manifest version was incremented to `0.3.2` for this fix-only patch.
+The user requested the next major UX consolidation step: move from separate prompt/checkpoint panels to one shared editor and replace cluttered lists with dropdown selectors. The dashboard now uses a single mode dropdown to switch between prompts and checkpoints, one unified editor form, and compact category/item dropdown controls plus contextual actions (add/rename/set-position/delete category; new/edit/delete item). Existing position-based ordering behavior for categories/items remains and is surfaced in dropdown labels. The manifest version was bumped to `0.3.6`.
 
 2) Key facts & decisions (bullets)
-- `loadLibrary` now computes `normalized = normalizeLibrary(raw)` and writes it back to `chrome.storage.local` when `raw` differs.
-- This persistence step prevents migrated `prompt.savedAt` values from being regenerated every dashboard load.
-- The fix also persists any other normalization cleanups produced during load.
-- Extension manifest version bumped from `0.3.1` to `0.3.2`.
+- Replaced dual tab/panel dashboard layout with a single workspace in `extension/dashboard.html`.
+- Added mode selector (`#editor-mode`) and dropdown-based selectors for categories/items (`#category-select`, `#item-select`).
+- Consolidated editor UI into one shared form (`#item-editor-*`) with mode-specific save/new labeling.
+- Added compact action rows for category and item management to reduce list clutter.
+- Rewrote `extension/dashboard.js` around one active mode state with per-mode selection/editing state maps.
+- Preserved and reused deterministic position logic for categories/items (`placeCategoryAtPosition`, `placeItemAtPosition`, normalization helpers).
+- Updated `extension/dashboard.css` to style the new single-workspace layout and wrapped action rows.
+- Bumped extension manifest version from `0.3.5` to `0.3.6`.
 - No third-party dependencies were added.
 
 3) Open threads / unresolved questions (bullets)
-- Confirm whether checkpoint entries should receive the same migration/audit treatment in UI copy for historical accuracy messaging.
-- Decide whether deep equality for migration persistence should move to a dedicated helper for readability and future testability.
-- Decide whether prompt/checkpoint editor consolidation remains the next incremental UX scope.
+- Decide whether category/item position editing should remain prompt-driven (`Set Position`) or move inline into dedicated controls.
+- Decide whether dropdown option labels should include saved timestamp or only position/title for readability.
+- Determine if category add UX should be inline-only or split into explicit “Create Category” modal/flow for discoverability.
 
 4) User intent & success criteria (bullets; mark inferred as **Inferred**)
-- Address PR feedback at `extension/lib/storage.js` regarding drifting migrated prompt timestamps.
-- Ensure legacy prompts missing `savedAt` gain a stable persisted timestamp after migration.
-- Keep the change minimal and aligned with current storage architecture.
-- **Inferred**: Avoid introducing behavior changes beyond timestamp stabilization and normalization persistence.
+- Implement one shared editor for prompts/checkpoints controlled by a mode dropdown.
+- Replace cluttered category/item lists with dropdown selectors for cleaner interface.
+- Keep mode-specific semantics clear to avoid cross-mode save confusion.
+- **Inferred**: Preserve existing data model and deterministic ordering while simplifying visual complexity.
 
 5) Assumptions & risks (bullets; mark inferred as **Inferred**)
-- Using `JSON.stringify` comparison is acceptable for current plain-object library structures.
-- **Inferred**: Future key-order or non-serializable fields could make stringify-based comparison less robust.
-- The first migration still assigns a generated timestamp when historical values are absent; this remains an approximation.
+- Users will accept dropdown + action-button workflows replacing visible list rows.
+- **Inferred**: Reduced visual density may improve clarity but could hide discoverability of some actions (rename/set-position/delete).
+- **Inferred**: Large JS rewrite of dashboard interactions carries regression risk in CRUD/selection flows and should be manually validated.
+- **Inferred**: Prompt-based position dialogs remain serviceable short-term but may warrant inline numeric inputs later.
 
 6) Tone / mood read (1–3 bullets; **Inferred**)
-- **Inferred**: Feedback is practical and correctness-focused.
-- **Inferred**: Priority is eliminating misleading UX signals with minimal churn.
+- **Inferred**: User is forward-moving and focused on achieving the planned UX milestones.
+- **Inferred**: Priority is practical simplification over preserving prior layout.
 
 7) Next actions (numbered list, 3–7 items)
-1. Run quick sanity checks for modified extension files.
-2. Commit timestamp migration persistence fix and manifest bump.
-3. Prepare PR summary describing the bug and stabilization behavior.
-4. Track optional follow-up to refactor normalization-diff detection helper.
+1. Manually validate mode switching and ensure category/item selections are isolated per mode.
+2. Validate full CRUD flows for categories/items in both modes with persisted reload behavior.
+3. Evaluate whether to replace prompt-based “Set Position” with inline numeric controls.
+4. Add lightweight regression tests around ordering/selection helpers if test harness is introduced.
 
 8) Last 10 messages (best-effort recap, chronological, label speakers)
-- User: Provided AGENTS instructions requiring checkpoint usage and updates for all repo changes.
-- User: Sent PR follow-up trigger to address review feedback on `extension/lib/storage.js` line 99.
-- User: Included PR metadata describing schema-alignment changes and current branch state.
-- User: Included reviewer comment noting migrated prompt `savedAt` drift when reopening dashboard.
-- User: Included Codex automated review context comment.
-- Assistant: Read repository instructions and current checkpoint for continuity.
-- Assistant: Inspected `extension/lib/storage.js` around the referenced line and validated the drift issue.
-- Assistant: Implemented `loadLibrary` persistence of normalized data when raw data differs.
-- Assistant: Bumped manifest version to `0.3.2` per repository convention.
-- Assistant: Updated checkpoint to capture this follow-up fix and remaining decisions.
+- User: Requested category numeric positions as follow-up to item positioning.
+- Assistant: Implemented category positioning in dashboard + storage normalization, bumped manifest, updated checkpoint, committed, and prepared PR metadata.
+- User: Requested next step to consolidate into one editor and implement dropdowns to clean interface.
+- Assistant: Re-read context and proceeded with single-editor + dropdown redesign.
+- Assistant: Replaced dashboard HTML with one unified workspace, mode dropdown, and compact control layout.
+- Assistant: Rewrote dashboard JS to a single active-mode editor flow with per-mode state maps and dropdown rendering.
+- Assistant: Preserved category/item positioning logic and adapted it to the unified workflow.
+- Assistant: Updated dashboard CSS for compact two-card workspace and wrapped action rows.
+- Assistant: Bumped manifest to `0.3.6`.
+- Assistant: Updated checkpoint and prepared commit/PR workflow for this UX consolidation step.

@@ -1,56 +1,87 @@
 import { createId, loadLibrary, saveLibrary } from './lib/storage.js';
 
+const MODES = {
+  prompts: {
+    id: 'prompts',
+    data: {
+      categories: 'categories',
+      items: 'prompts'
+    },
+    copy: {
+      entity: 'Prompt',
+      entityLower: 'prompt',
+      categorySingular: 'category',
+      categoryPlural: 'categories',
+      categoryIdPrefix: 'cat',
+      itemIdPrefix: 'prompt'
+    }
+  },
+  checkpoints: {
+    id: 'checkpoints',
+    data: {
+      categories: 'checkpointCategories',
+      items: 'checkpoints'
+    },
+    copy: {
+      entity: 'Checkpoint',
+      entityLower: 'checkpoint',
+      categorySingular: 'checkpoint category',
+      categoryPlural: 'checkpoint categories',
+      categoryIdPrefix: 'cp_cat',
+      itemIdPrefix: 'cp'
+    }
+  }
+};
+
 const state = {
-  activeTab: 'prompts',
+  activeMode: 'prompts',
   library: null,
-  selectedPromptCategoryId: null,
-  selectedPromptId: null,
-  editingPromptId: null,
-  selectedCheckpointCategoryId: null,
-  selectedCheckpointId: null,
-  editingCheckpointId: null,
+  selectedCategoryId: {
+    prompts: null,
+    checkpoints: null
+  },
+  selectedItemId: {
+    prompts: null,
+    checkpoints: null
+  },
+  editingItemId: {
+    prompts: null,
+    checkpoints: null
+  },
   statusTimer: null
 };
 
 const el = {
   status: document.querySelector('#save-status'),
-  tabPrompts: document.querySelector('#tab-prompts'),
-  tabCheckpoints: document.querySelector('#tab-checkpoints'),
-  panelPrompts: document.querySelector('#panel-prompts'),
-  panelCheckpoints: document.querySelector('#panel-checkpoints'),
+  modeSelect: document.querySelector('#editor-mode'),
 
-  promptCategories: document.querySelector('#prompt-categories'),
-  promptCategoryName: document.querySelector('#prompt-category-name'),
-  promptCategoryAdd: document.querySelector('#prompt-category-add'),
-  promptItems: document.querySelector('#prompt-items'),
-  promptNew: document.querySelector('#prompt-new'),
-  promptEditorCategory: document.querySelector('#prompt-editor-category'),
-  promptEditorTitle: document.querySelector('#prompt-editor-title'),
-  promptEditorDescription: document.querySelector('#prompt-editor-description'),
-  promptEditorBody: document.querySelector('#prompt-editor-body'),
-  promptEditorSavedAt: document.querySelector('#prompt-editor-saved-at'),
-  promptSave: document.querySelector('#prompt-save'),
-  promptCancel: document.querySelector('#prompt-cancel'),
+  categorySelect: document.querySelector('#category-select'),
+  categoryName: document.querySelector('#category-name'),
+  categoryAdd: document.querySelector('#category-add'),
+  categoryRename: document.querySelector('#category-rename'),
+  categoryPosition: document.querySelector('#category-position'),
+  categoryDelete: document.querySelector('#category-delete'),
 
-  checkpointCategories: document.querySelector('#checkpoint-categories'),
-  checkpointCategoryName: document.querySelector('#checkpoint-category-name'),
-  checkpointCategoryAdd: document.querySelector('#checkpoint-category-add'),
-  checkpointItems: document.querySelector('#checkpoint-items'),
-  checkpointNew: document.querySelector('#checkpoint-new'),
-  checkpointEditorCategory: document.querySelector('#checkpoint-editor-category'),
-  checkpointEditorTitle: document.querySelector('#checkpoint-editor-title'),
-  checkpointEditorDescription: document.querySelector('#checkpoint-editor-description'),
-  checkpointEditorBody: document.querySelector('#checkpoint-editor-body'),
-  checkpointSave: document.querySelector('#checkpoint-save'),
-  checkpointCancel: document.querySelector('#checkpoint-cancel')
+  itemSelect: document.querySelector('#item-select'),
+  itemNew: document.querySelector('#item-new'),
+  itemEdit: document.querySelector('#item-edit'),
+  itemDelete: document.querySelector('#item-delete'),
+
+  editorTitle: document.querySelector('#editor-title'),
+  itemEditorCategory: document.querySelector('#item-editor-category'),
+  itemEditorTitle: document.querySelector('#item-editor-title'),
+  itemEditorDescription: document.querySelector('#item-editor-description'),
+  itemEditorBody: document.querySelector('#item-editor-body'),
+  itemEditorPosition: document.querySelector('#item-editor-position'),
+  itemEditorSavedAt: document.querySelector('#item-editor-saved-at'),
+  itemSave: document.querySelector('#item-save'),
+  itemCancel: document.querySelector('#item-cancel')
 };
 
 function setStatus(message) {
   clearTimeout(state.statusTimer);
   el.status.textContent = message;
-  if (!message) {
-    return;
-  }
+  if (!message) return;
 
   state.statusTimer = setTimeout(() => {
     el.status.textContent = '';
@@ -62,592 +93,438 @@ async function persist() {
   setStatus('Saved.');
 }
 
-function moveInArray(list, index, direction) {
-  const nextIndex = index + direction;
-  if (index < 0 || nextIndex < 0 || nextIndex >= list.length) {
-    return false;
-  }
-
-  [list[index], list[nextIndex]] = [list[nextIndex], list[index]];
-  return true;
+function modeConfig(mode = state.activeMode) {
+  return MODES[mode];
 }
 
-function moveItemWithinCategory(items, id, direction) {
-  const index = items.findIndex((item) => item.id === id);
-  if (index < 0) {
-    return false;
-  }
-
-  const { categoryId } = items[index];
-  const sameCategoryIndexes = items
-    .map((item, itemIndex) => ({ item, itemIndex }))
-    .filter(({ item }) => item.categoryId === categoryId)
-    .map(({ itemIndex }) => itemIndex);
-
-  const position = sameCategoryIndexes.indexOf(index);
-  const targetPosition = position + direction;
-  if (position < 0 || targetPosition < 0 || targetPosition >= sameCategoryIndexes.length) {
-    return false;
-  }
-
-  const targetIndex = sameCategoryIndexes[targetPosition];
-  [items[index], items[targetIndex]] = [items[targetIndex], items[index]];
-  return true;
+function collection(mode, key) {
+  return state.library[modeConfig(mode).data[key]];
 }
 
-function renderTabs() {
-  const promptActive = state.activeTab === 'prompts';
-  el.tabPrompts.classList.toggle('tab--active', promptActive);
-  el.tabCheckpoints.classList.toggle('tab--active', !promptActive);
-  el.panelPrompts.classList.toggle('panel--active', promptActive);
-  el.panelCheckpoints.classList.toggle('panel--active', !promptActive);
+function getSelectedCategoryId(mode = state.activeMode) {
+  return state.selectedCategoryId[mode];
 }
 
-function createListItem({ label, meta, selected, controls }) {
-  const li = document.createElement('li');
-  if (selected) {
-    li.classList.add('is-selected');
-  }
-
-  const labelWrap = document.createElement('div');
-  labelWrap.className = 'item-label';
-
-  const strong = document.createElement('strong');
-  strong.textContent = label;
-  labelWrap.appendChild(strong);
-
-  if (meta) {
-    const metaEl = document.createElement('div');
-    metaEl.className = 'item-meta';
-    metaEl.textContent = meta;
-    labelWrap.appendChild(metaEl);
-  }
-
-  const controlsWrap = document.createElement('div');
-  controlsWrap.className = 'controls';
-  controls.forEach((button) => controlsWrap.appendChild(button));
-
-  li.append(labelWrap, controlsWrap);
-  return li;
+function setSelectedCategoryId(mode, value) {
+  state.selectedCategoryId[mode] = value;
 }
 
-function makeButton(text, onClick, disabled = false) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.textContent = text;
-  button.disabled = disabled;
-  button.addEventListener('click', onClick);
-  return button;
+function getSelectedItemId(mode = state.activeMode) {
+  return state.selectedItemId[mode];
 }
 
-function renderPromptCategories() {
-  const categories = state.library.categories;
-  el.promptCategories.replaceChildren();
+function setSelectedItemId(mode, value) {
+  state.selectedItemId[mode] = value;
+}
 
-  if (!categories.length) {
-    const empty = document.createElement('p');
-    empty.className = 'empty';
-    empty.textContent = 'No categories yet.';
-    el.promptCategories.appendChild(empty);
-    return;
+function getEditingItemId(mode = state.activeMode) {
+  return state.editingItemId[mode];
+}
+
+function setEditingItemId(mode, value) {
+  state.editingItemId[mode] = value;
+}
+
+function parseTargetPosition(value, maxPosition) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return maxPosition;
   }
+  return Math.min(Math.max(parsed, 1), maxPosition);
+}
 
-  if (!categories.some((category) => category.id === state.selectedPromptCategoryId)) {
-    state.selectedPromptCategoryId = categories[0].id;
-  }
+function getSortedCategories(mode = state.activeMode) {
+  return collection(mode, 'categories')
+    .slice()
+    .sort((a, b) => (a.position || 1) - (b.position || 1));
+}
 
+function getCategoryItems(mode = state.activeMode, categoryId = getSelectedCategoryId(mode)) {
+  return collection(mode, 'items')
+    .filter((item) => item.categoryId === categoryId)
+    .sort((a, b) => (a.position || 1) - (b.position || 1));
+}
+
+function normalizeCategoryPositions(mode = state.activeMode) {
+  const categories = getSortedCategories(mode);
   categories.forEach((category, index) => {
-    const selectButton = makeButton('Select', () => {
-      state.selectedPromptCategoryId = category.id;
-      state.selectedPromptId = null;
-      state.editingPromptId = null;
-      renderPrompts();
-    });
-
-    const upButton = makeButton('↑', async () => {
-      if (!moveInArray(state.library.categories, index, -1)) return;
-      await persist();
-      renderPrompts();
-    }, index === 0);
-
-    const downButton = makeButton('↓', async () => {
-      if (!moveInArray(state.library.categories, index, 1)) return;
-      await persist();
-      renderPrompts();
-    }, index === categories.length - 1);
-
-    const renameButton = makeButton('Rename', async () => {
-      const nextName = prompt('Rename category', category.name);
-      if (!nextName || !nextName.trim()) return;
-      category.name = nextName.trim();
-      await persist();
-      renderPrompts();
-    });
-
-    const deleteButton = makeButton('Delete', async () => {
-      const promptCount = state.library.prompts.filter((promptItem) => promptItem.categoryId === category.id).length;
-      const ok = confirm(`Delete category "${category.name}" and ${promptCount} prompt(s)?`);
-      if (!ok) return;
-
-      state.library.categories = state.library.categories.filter((item) => item.id !== category.id);
-      state.library.prompts = state.library.prompts.filter((item) => item.categoryId !== category.id);
-      if (state.selectedPromptCategoryId === category.id) {
-        state.selectedPromptCategoryId = null;
-      }
-      if (state.selectedPromptId && !state.library.prompts.some((item) => item.id === state.selectedPromptId)) {
-        state.selectedPromptId = null;
-      }
-      state.editingPromptId = null;
-      await persist();
-      renderPrompts();
-    });
-
-    el.promptCategories.appendChild(createListItem({
-      label: category.name,
-      selected: state.selectedPromptCategoryId === category.id,
-      controls: [selectButton, upButton, downButton, renameButton, deleteButton]
-    }));
+    category.position = index + 1;
   });
 }
 
-function renderPromptItems() {
-  const categoryId = state.selectedPromptCategoryId;
-  const prompts = state.library.prompts.filter((promptItem) => promptItem.categoryId === categoryId);
-
-  el.promptItems.replaceChildren();
-
-  if (!prompts.length) {
-    const empty = document.createElement('p');
-    empty.className = 'empty';
-    empty.textContent = 'No prompts in this category.';
-    el.promptItems.appendChild(empty);
-    state.selectedPromptId = null;
-    return;
-  }
-
-  if (!prompts.some((promptItem) => promptItem.id === state.selectedPromptId)) {
-    state.selectedPromptId = prompts[0].id;
-  }
-
-  prompts.forEach((promptItem, index) => {
-    const selectButton = makeButton('Select', () => {
-      state.selectedPromptId = promptItem.id;
-      state.editingPromptId = null;
-      renderPrompts();
-    });
-
-    const editButton = makeButton('Edit', () => {
-      state.editingPromptId = promptItem.id;
-      renderPromptEditor();
-    });
-
-    const upButton = makeButton('↑', async () => {
-      if (!moveItemWithinCategory(state.library.prompts, promptItem.id, -1)) return;
-      await persist();
-      renderPrompts();
-    }, index === 0);
-
-    const downButton = makeButton('↓', async () => {
-      if (!moveItemWithinCategory(state.library.prompts, promptItem.id, 1)) return;
-      await persist();
-      renderPrompts();
-    }, index === prompts.length - 1);
-
-    const deleteButton = makeButton('Delete', async () => {
-      const ok = confirm(`Delete prompt "${promptItem.title}"?`);
-      if (!ok) return;
-      state.library.prompts = state.library.prompts.filter((item) => item.id !== promptItem.id);
-      if (state.selectedPromptId === promptItem.id) {
-        state.selectedPromptId = null;
-      }
-      if (state.editingPromptId === promptItem.id) {
-        state.editingPromptId = null;
-      }
-      await persist();
-      renderPrompts();
-    });
-
-    const savedAt = new Date(promptItem.savedAt).toLocaleString();
-    el.promptItems.appendChild(createListItem({
-      label: promptItem.title,
-      meta: `Saved ${savedAt}`,
-      selected: state.selectedPromptId === promptItem.id,
-      controls: [selectButton, editButton, upButton, downButton, deleteButton]
-    }));
+function normalizeItemPositions(mode = state.activeMode, categoryId) {
+  const items = getCategoryItems(mode, categoryId);
+  items.forEach((item, index) => {
+    item.position = index + 1;
   });
 }
 
-function renderPromptEditor() {
-  const categories = state.library.categories;
-  el.promptEditorCategory.replaceChildren(
+function placeCategoryAtPosition(mode, category, requestedPosition) {
+  const categories = collection(mode, 'categories').filter((item) => item.id !== category.id);
+  const sortedWithout = categories.slice().sort((a, b) => (a.position || 1) - (b.position || 1));
+  const targetPosition = parseTargetPosition(requestedPosition, sortedWithout.length + 1);
+
+  sortedWithout.splice(targetPosition - 1, 0, category);
+  sortedWithout.forEach((item, index) => {
+    item.position = index + 1;
+  });
+
+  state.library[modeConfig(mode).data.categories] = sortedWithout;
+}
+
+function placeItemAtPosition(mode, item, categoryId, requestedPosition) {
+  const items = collection(mode, 'items');
+  const oldCategoryId = item.categoryId;
+
+  const keepItems = items.filter((entry) => entry.id !== item.id);
+  const otherCategoryItems = keepItems.filter((entry) => entry.categoryId !== categoryId);
+  const targetCategoryItems = keepItems
+    .filter((entry) => entry.categoryId === categoryId)
+    .sort((a, b) => (a.position || 1) - (b.position || 1));
+
+  const targetPosition = parseTargetPosition(requestedPosition, targetCategoryItems.length + 1);
+  targetCategoryItems.splice(targetPosition - 1, 0, item);
+
+  targetCategoryItems.forEach((entry, index) => {
+    entry.categoryId = categoryId;
+    entry.position = index + 1;
+  });
+
+  state.library[modeConfig(mode).data.items] = [...otherCategoryItems, ...targetCategoryItems];
+
+  if (oldCategoryId && oldCategoryId !== categoryId) {
+    normalizeItemPositions(mode, oldCategoryId);
+  }
+}
+
+function ensureValidSelections(mode = state.activeMode) {
+  const categories = getSortedCategories(mode);
+  const currentCategoryId = getSelectedCategoryId(mode);
+  if (!categories.some((category) => category.id === currentCategoryId)) {
+    setSelectedCategoryId(mode, categories[0]?.id || null);
+  }
+
+  const items = getCategoryItems(mode);
+  const currentItemId = getSelectedItemId(mode);
+  if (!items.some((item) => item.id === currentItemId)) {
+    setSelectedItemId(mode, items[0]?.id || null);
+  }
+
+  const editingId = getEditingItemId(mode);
+  if (editingId && !collection(mode, 'items').some((item) => item.id === editingId)) {
+    setEditingItemId(mode, null);
+  }
+}
+
+function renderModeChrome() {
+  const mode = state.activeMode;
+  const config = modeConfig(mode);
+
+  el.modeSelect.value = mode;
+  el.editorTitle.textContent = `${config.copy.entity} Editor`;
+  el.itemSave.textContent = `Save ${config.copy.entity}`;
+  el.itemNew.textContent = `New ${config.copy.entity}`;
+}
+
+function renderCategorySelects() {
+  const mode = state.activeMode;
+  const categories = getSortedCategories(mode);
+  const selectedCategoryId = getSelectedCategoryId(mode) || '';
+
+  el.categorySelect.replaceChildren(
     ...categories.map((category) => {
       const option = document.createElement('option');
       option.value = category.id;
-      option.textContent = category.name;
+      option.textContent = `${category.position || 1}. ${category.name}`;
       return option;
     })
   );
 
-  const editing = state.library.prompts.find((promptItem) => promptItem.id === state.editingPromptId) || null;
-
-  const selectedCategory = editing?.categoryId || state.selectedPromptCategoryId || categories[0]?.id || '';
-  el.promptEditorCategory.disabled = categories.length === 0;
-  el.promptEditorTitle.disabled = categories.length === 0;
-  el.promptEditorDescription.disabled = categories.length === 0;
-  el.promptEditorBody.disabled = categories.length === 0;
-  el.promptEditorSavedAt.disabled = true;
-  el.promptSave.disabled = categories.length === 0;
-
-  el.promptEditorCategory.value = selectedCategory;
-  el.promptEditorTitle.value = editing?.title || '';
-  el.promptEditorDescription.value = editing?.description || '';
-  el.promptEditorBody.value = editing?.body || '';
-  el.promptEditorSavedAt.value = editing?.savedAt ? new Date(editing.savedAt).toLocaleString() : 'Not saved yet';
-}
-
-function renderPrompts() {
-  renderPromptCategories();
-  renderPromptItems();
-  renderPromptEditor();
-}
-
-function renderCheckpointCategories() {
-  const categories = state.library.checkpointCategories;
-  el.checkpointCategories.replaceChildren();
-
-  if (!categories.length) {
-    const empty = document.createElement('p');
-    empty.className = 'empty';
-    empty.textContent = 'No checkpoint categories yet.';
-    el.checkpointCategories.appendChild(empty);
-    return;
-  }
-
-  if (!categories.some((category) => category.id === state.selectedCheckpointCategoryId)) {
-    state.selectedCheckpointCategoryId = categories[0].id;
-  }
-
-  categories.forEach((category, index) => {
-    const selectButton = makeButton('Select', () => {
-      state.selectedCheckpointCategoryId = category.id;
-      state.selectedCheckpointId = null;
-      state.editingCheckpointId = null;
-      renderCheckpoints();
-    });
-
-    const upButton = makeButton('↑', async () => {
-      if (!moveInArray(state.library.checkpointCategories, index, -1)) return;
-      await persist();
-      renderCheckpoints();
-    }, index === 0);
-
-    const downButton = makeButton('↓', async () => {
-      if (!moveInArray(state.library.checkpointCategories, index, 1)) return;
-      await persist();
-      renderCheckpoints();
-    }, index === categories.length - 1);
-
-    const renameButton = makeButton('Rename', async () => {
-      const nextName = prompt('Rename category', category.name);
-      if (!nextName || !nextName.trim()) return;
-      category.name = nextName.trim();
-      await persist();
-      renderCheckpoints();
-    });
-
-    const deleteButton = makeButton('Delete', async () => {
-      const checkpointCount = state.library.checkpoints.filter((item) => item.categoryId === category.id).length;
-      const ok = confirm(`Delete category "${category.name}" and ${checkpointCount} checkpoint(s)?`);
-      if (!ok) return;
-
-      state.library.checkpointCategories = state.library.checkpointCategories.filter((item) => item.id !== category.id);
-      state.library.checkpoints = state.library.checkpoints.filter((item) => item.categoryId !== category.id);
-      if (state.selectedCheckpointCategoryId === category.id) {
-        state.selectedCheckpointCategoryId = null;
-      }
-      if (state.selectedCheckpointId && !state.library.checkpoints.some((item) => item.id === state.selectedCheckpointId)) {
-        state.selectedCheckpointId = null;
-      }
-      state.editingCheckpointId = null;
-      await persist();
-      renderCheckpoints();
-    });
-
-    el.checkpointCategories.appendChild(createListItem({
-      label: category.name,
-      selected: state.selectedCheckpointCategoryId === category.id,
-      controls: [selectButton, upButton, downButton, renameButton, deleteButton]
-    }));
-  });
-}
-
-function renderCheckpointItems() {
-  const categoryId = state.selectedCheckpointCategoryId;
-  const checkpoints = state.library.checkpoints.filter((checkpoint) => checkpoint.categoryId === categoryId);
-
-  el.checkpointItems.replaceChildren();
-
-  if (!checkpoints.length) {
-    const empty = document.createElement('p');
-    empty.className = 'empty';
-    empty.textContent = 'No checkpoints in this category.';
-    el.checkpointItems.appendChild(empty);
-    state.selectedCheckpointId = null;
-    return;
-  }
-
-  if (!checkpoints.some((checkpoint) => checkpoint.id === state.selectedCheckpointId)) {
-    state.selectedCheckpointId = checkpoints[0].id;
-  }
-
-  checkpoints.forEach((checkpoint, index) => {
-    const selectButton = makeButton('Select', () => {
-      state.selectedCheckpointId = checkpoint.id;
-      state.editingCheckpointId = null;
-      renderCheckpoints();
-    });
-
-    const editButton = makeButton('Edit', () => {
-      state.editingCheckpointId = checkpoint.id;
-      renderCheckpointEditor();
-    });
-
-    const upButton = makeButton('↑', async () => {
-      if (!moveItemWithinCategory(state.library.checkpoints, checkpoint.id, -1)) return;
-      await persist();
-      renderCheckpoints();
-    }, index === 0);
-
-    const downButton = makeButton('↓', async () => {
-      if (!moveItemWithinCategory(state.library.checkpoints, checkpoint.id, 1)) return;
-      await persist();
-      renderCheckpoints();
-    }, index === checkpoints.length - 1);
-
-    const deleteButton = makeButton('Delete', async () => {
-      const ok = confirm(`Delete checkpoint "${checkpoint.title}"?`);
-      if (!ok) return;
-      state.library.checkpoints = state.library.checkpoints.filter((item) => item.id !== checkpoint.id);
-      if (state.selectedCheckpointId === checkpoint.id) {
-        state.selectedCheckpointId = null;
-      }
-      if (state.editingCheckpointId === checkpoint.id) {
-        state.editingCheckpointId = null;
-      }
-      await persist();
-      renderCheckpoints();
-    });
-
-    const savedAt = new Date(checkpoint.savedAt).toLocaleString();
-    el.checkpointItems.appendChild(createListItem({
-      label: checkpoint.title,
-      meta: `Saved ${savedAt}`,
-      selected: state.selectedCheckpointId === checkpoint.id,
-      controls: [selectButton, editButton, upButton, downButton, deleteButton]
-    }));
-  });
-}
-
-function renderCheckpointEditor() {
-  const categories = state.library.checkpointCategories;
-  el.checkpointEditorCategory.replaceChildren(
+  el.itemEditorCategory.replaceChildren(
     ...categories.map((category) => {
       const option = document.createElement('option');
       option.value = category.id;
-      option.textContent = category.name;
+      option.textContent = `${category.position || 1}. ${category.name}`;
       return option;
     })
   );
 
-  const editing = state.library.checkpoints.find((item) => item.id === state.editingCheckpointId) || null;
+  const hasCategories = categories.length > 0;
+  el.categorySelect.disabled = !hasCategories;
+  el.itemEditorCategory.disabled = !hasCategories;
+  el.categoryRename.disabled = !hasCategories;
+  el.categoryPosition.disabled = !hasCategories;
+  el.categoryDelete.disabled = !hasCategories;
 
-  const selectedCategory = editing?.categoryId || state.selectedCheckpointCategoryId || categories[0]?.id || '';
-  el.checkpointEditorCategory.disabled = categories.length === 0;
-  el.checkpointEditorTitle.disabled = categories.length === 0;
-  el.checkpointEditorDescription.disabled = categories.length === 0;
-  el.checkpointEditorBody.disabled = categories.length === 0;
-  el.checkpointSave.disabled = categories.length === 0;
-
-  el.checkpointEditorCategory.value = selectedCategory;
-  el.checkpointEditorTitle.value = editing?.title || '';
-  el.checkpointEditorDescription.value = editing?.description || '';
-  el.checkpointEditorBody.value = editing?.body || '';
+  if (hasCategories) {
+    el.categorySelect.value = selectedCategoryId;
+  }
 }
 
-function renderCheckpoints() {
-  renderCheckpointCategories();
-  renderCheckpointItems();
-  renderCheckpointEditor();
+function renderItemSelect() {
+  const mode = state.activeMode;
+  const items = getCategoryItems(mode);
+  const selectedItemId = getSelectedItemId(mode) || '';
+
+  el.itemSelect.replaceChildren(
+    ...items.map((item) => {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = `${item.position || 1}. ${item.title}`;
+      return option;
+    })
+  );
+
+  const hasItems = items.length > 0;
+  el.itemSelect.disabled = !hasItems;
+  el.itemEdit.disabled = !hasItems;
+  el.itemDelete.disabled = !hasItems;
+
+  if (hasItems) {
+    el.itemSelect.value = selectedItemId;
+  }
 }
 
-function bindPromptEvents() {
-  el.promptCategoryAdd.addEventListener('click', async () => {
-    const name = el.promptCategoryName.value.trim();
-    if (!name) return;
-    state.library.categories.push({ id: createId('cat'), name });
-    el.promptCategoryName.value = '';
-    await persist();
-    renderPrompts();
+function renderEditor() {
+  const mode = state.activeMode;
+  const categories = getSortedCategories(mode);
+  const selectedCategoryId = getSelectedCategoryId(mode);
+  const editing = collection(mode, 'items').find((item) => item.id === getEditingItemId(mode)) || null;
+
+  const defaultCategoryId = editing?.categoryId || selectedCategoryId || categories[0]?.id || '';
+  const itemCount = defaultCategoryId ? getCategoryItems(mode, defaultCategoryId).length : 0;
+
+  const hasCategories = categories.length > 0;
+  el.itemEditorTitle.disabled = !hasCategories;
+  el.itemEditorDescription.disabled = !hasCategories;
+  el.itemEditorBody.disabled = !hasCategories;
+  el.itemEditorPosition.disabled = !hasCategories;
+  el.itemSave.disabled = !hasCategories;
+
+  el.itemEditorCategory.value = defaultCategoryId;
+  el.itemEditorTitle.value = editing?.title || '';
+  el.itemEditorDescription.value = editing?.description || '';
+  el.itemEditorBody.value = editing?.body || '';
+  el.itemEditorPosition.value = String(editing?.position || Math.max(itemCount, 0) + 1);
+  el.itemEditorSavedAt.value = editing?.savedAt ? new Date(editing.savedAt).toLocaleString() : 'Not saved yet';
+}
+
+function render() {
+  ensureValidSelections(state.activeMode);
+  renderModeChrome();
+  renderCategorySelects();
+  renderItemSelect();
+  renderEditor();
+}
+
+function bindEvents() {
+  el.modeSelect.addEventListener('change', () => {
+    state.activeMode = el.modeSelect.value;
+    render();
   });
 
-  el.promptNew.addEventListener('click', () => {
-    state.editingPromptId = null;
-    el.promptEditorTitle.value = '';
-    el.promptEditorDescription.value = '';
-    el.promptEditorBody.value = '';
-    el.promptEditorSavedAt.value = 'Not saved yet';
-    if (state.selectedPromptCategoryId) {
-      el.promptEditorCategory.value = state.selectedPromptCategoryId;
+  el.categorySelect.addEventListener('change', () => {
+    setSelectedCategoryId(state.activeMode, el.categorySelect.value || null);
+    setSelectedItemId(state.activeMode, null);
+    setEditingItemId(state.activeMode, null);
+    render();
+  });
+
+  el.categoryAdd.addEventListener('click', async () => {
+    const mode = state.activeMode;
+    const config = modeConfig(mode);
+    const name = el.categoryName.value.trim();
+    if (!name) return;
+
+    const categories = getSortedCategories(mode);
+    const newCategory = {
+      id: createId(config.copy.categoryIdPrefix),
+      name,
+      position: categories.length + 1
+    };
+
+    collection(mode, 'categories').push(newCategory);
+    setSelectedCategoryId(mode, newCategory.id);
+    setSelectedItemId(mode, null);
+    setEditingItemId(mode, null);
+
+    el.categoryName.value = '';
+    await persist();
+    render();
+  });
+
+  el.categoryRename.addEventListener('click', async () => {
+    const mode = state.activeMode;
+    const config = modeConfig(mode);
+    const category = collection(mode, 'categories').find((item) => item.id === getSelectedCategoryId(mode));
+    if (!category) return;
+
+    const nextName = prompt(`Rename ${config.copy.categorySingular}`, category.name);
+    if (!nextName || !nextName.trim()) return;
+    category.name = nextName.trim();
+
+    await persist();
+    render();
+  });
+
+  el.categoryPosition.addEventListener('click', async () => {
+    const mode = state.activeMode;
+    const category = collection(mode, 'categories').find((item) => item.id === getSelectedCategoryId(mode));
+    if (!category) return;
+
+    const requestedPosition = prompt('Set category position', String(category.position || 1));
+    if (requestedPosition === null) return;
+
+    placeCategoryAtPosition(mode, category, requestedPosition);
+    await persist();
+    render();
+  });
+
+  el.categoryDelete.addEventListener('click', async () => {
+    const mode = state.activeMode;
+    const config = modeConfig(mode);
+    const categoryId = getSelectedCategoryId(mode);
+    const category = collection(mode, 'categories').find((item) => item.id === categoryId);
+    if (!category) return;
+
+    const items = collection(mode, 'items');
+    const itemCount = items.filter((item) => item.categoryId === category.id).length;
+    const ok = confirm(`Delete ${config.copy.categorySingular} "${category.name}" and ${itemCount} ${config.copy.entityLower}(s)?`);
+    if (!ok) return;
+
+    state.library[config.data.categories] = collection(mode, 'categories').filter((item) => item.id !== category.id);
+    state.library[config.data.items] = items.filter((item) => item.categoryId !== category.id);
+    normalizeCategoryPositions(mode);
+
+    setSelectedCategoryId(mode, null);
+    setSelectedItemId(mode, null);
+    setEditingItemId(mode, null);
+
+    await persist();
+    render();
+  });
+
+  el.itemSelect.addEventListener('change', () => {
+    setSelectedItemId(state.activeMode, el.itemSelect.value || null);
+    setEditingItemId(state.activeMode, null);
+    render();
+  });
+
+  el.itemNew.addEventListener('click', () => {
+    const mode = state.activeMode;
+    const selectedCategoryId = getSelectedCategoryId(mode);
+    setEditingItemId(mode, null);
+
+    el.itemEditorTitle.value = '';
+    el.itemEditorDescription.value = '';
+    el.itemEditorBody.value = '';
+    el.itemEditorSavedAt.value = 'Not saved yet';
+    if (selectedCategoryId) {
+      el.itemEditorCategory.value = selectedCategoryId;
+      el.itemEditorPosition.value = String(getCategoryItems(mode, selectedCategoryId).length + 1);
+    } else {
+      el.itemEditorPosition.value = '1';
     }
   });
 
-  el.promptSave.addEventListener('click', async () => {
-    const categoryId = el.promptEditorCategory.value;
-    const title = el.promptEditorTitle.value.trim();
-    const description = el.promptEditorDescription.value.trim();
-    const body = el.promptEditorBody.value;
+  el.itemEdit.addEventListener('click', () => {
+    const mode = state.activeMode;
+    const selectedItemId = getSelectedItemId(mode);
+    if (!selectedItemId) return;
+
+    setEditingItemId(mode, selectedItemId);
+    renderEditor();
+  });
+
+  el.itemDelete.addEventListener('click', async () => {
+    const mode = state.activeMode;
+    const config = modeConfig(mode);
+    const selectedItemId = getSelectedItemId(mode);
+    const item = collection(mode, 'items').find((entry) => entry.id === selectedItemId);
+    if (!item) return;
+
+    const ok = confirm(`Delete ${config.copy.entityLower} "${item.title}"?`);
+    if (!ok) return;
+
+    state.library[config.data.items] = collection(mode, 'items').filter((entry) => entry.id !== item.id);
+    normalizeItemPositions(mode, item.categoryId);
+
+    setSelectedItemId(mode, null);
+    if (getEditingItemId(mode) === item.id) {
+      setEditingItemId(mode, null);
+    }
+
+    await persist();
+    render();
+  });
+
+  el.itemSave.addEventListener('click', async () => {
+    const mode = state.activeMode;
+    const config = modeConfig(mode);
+    const categoryId = el.itemEditorCategory.value;
+    const title = el.itemEditorTitle.value.trim();
+    const description = el.itemEditorDescription.value.trim();
+    const body = el.itemEditorBody.value;
+    const requestedPosition = el.itemEditorPosition.value;
 
     if (!categoryId) {
-      alert('Create a category first.');
+      alert(`Create a ${config.copy.categorySingular} first.`);
       return;
     }
 
     if (!title) {
-      alert('Prompt title is required.');
+      alert(`${config.copy.entity} title is required.`);
       return;
     }
 
-    if (state.editingPromptId) {
-      const editing = state.library.prompts.find((item) => item.id === state.editingPromptId);
+    const items = collection(mode, 'items');
+    const editingId = getEditingItemId(mode);
+
+    if (editingId) {
+      const editing = items.find((item) => item.id === editingId);
       if (!editing) {
-        alert('Prompt no longer exists.');
-        state.editingPromptId = null;
+        alert(`${config.copy.entity} no longer exists.`);
+        setEditingItemId(mode, null);
       } else {
-        editing.categoryId = categoryId;
         editing.title = title;
         editing.description = description;
         editing.body = body;
         editing.savedAt = new Date().toISOString();
+        placeItemAtPosition(mode, editing, categoryId, requestedPosition);
       }
     } else {
-      state.library.prompts.push({
-        id: createId('prompt'),
+      const newItem = {
+        id: createId(config.copy.itemIdPrefix),
         categoryId,
+        position: 1,
         title,
         description,
         body,
         savedAt: new Date().toISOString()
-      });
+      };
+      items.push(newItem);
+      placeItemAtPosition(mode, newItem, categoryId, requestedPosition);
     }
 
-    state.selectedPromptCategoryId = categoryId;
-    state.editingPromptId = null;
+    setSelectedCategoryId(mode, categoryId);
+    setEditingItemId(mode, null);
     await persist();
-    renderPrompts();
+    render();
   });
 
-  el.promptCancel.addEventListener('click', () => {
-    state.editingPromptId = null;
-    renderPromptEditor();
-  });
-}
-
-function bindCheckpointEvents() {
-  el.checkpointCategoryAdd.addEventListener('click', async () => {
-    const name = el.checkpointCategoryName.value.trim();
-    if (!name) return;
-    state.library.checkpointCategories.push({ id: createId('cp_cat'), name });
-    el.checkpointCategoryName.value = '';
-    await persist();
-    renderCheckpoints();
-  });
-
-  el.checkpointNew.addEventListener('click', () => {
-    state.editingCheckpointId = null;
-    el.checkpointEditorTitle.value = '';
-    el.checkpointEditorDescription.value = '';
-    el.checkpointEditorBody.value = '';
-    if (state.selectedCheckpointCategoryId) {
-      el.checkpointEditorCategory.value = state.selectedCheckpointCategoryId;
-    }
-  });
-
-  el.checkpointSave.addEventListener('click', async () => {
-    const categoryId = el.checkpointEditorCategory.value;
-    const title = el.checkpointEditorTitle.value.trim();
-    const description = el.checkpointEditorDescription.value.trim();
-    const body = el.checkpointEditorBody.value;
-
-    if (!categoryId) {
-      alert('Create a checkpoint category first.');
-      return;
-    }
-
-    if (!title) {
-      alert('Checkpoint title is required.');
-      return;
-    }
-
-    if (state.editingCheckpointId) {
-      const editing = state.library.checkpoints.find((item) => item.id === state.editingCheckpointId);
-      if (!editing) {
-        alert('Checkpoint no longer exists.');
-        state.editingCheckpointId = null;
-      } else {
-        editing.categoryId = categoryId;
-        editing.title = title;
-        editing.description = description;
-        editing.body = body;
-        editing.savedAt = new Date().toISOString();
-      }
-    } else {
-      state.library.checkpoints.push({
-        id: createId('cp'),
-        categoryId,
-        title,
-        description,
-        body,
-        savedAt: new Date().toISOString()
-      });
-    }
-
-    state.selectedCheckpointCategoryId = categoryId;
-    state.editingCheckpointId = null;
-    await persist();
-    renderCheckpoints();
-  });
-
-  el.checkpointCancel.addEventListener('click', () => {
-    state.editingCheckpointId = null;
-    renderCheckpointEditor();
-  });
-}
-
-function bindTabEvents() {
-  el.tabPrompts.addEventListener('click', () => {
-    state.activeTab = 'prompts';
-    renderTabs();
-  });
-
-  el.tabCheckpoints.addEventListener('click', () => {
-    state.activeTab = 'checkpoints';
-    renderTabs();
+  el.itemCancel.addEventListener('click', () => {
+    setEditingItemId(state.activeMode, null);
+    renderEditor();
   });
 }
 
 async function init() {
   state.library = await loadLibrary();
+  state.selectedCategoryId.prompts = getSortedCategories('prompts')[0]?.id || null;
+  state.selectedCategoryId.checkpoints = getSortedCategories('checkpoints')[0]?.id || null;
 
-  state.selectedPromptCategoryId = state.library.categories[0]?.id || null;
-  state.selectedCheckpointCategoryId = state.library.checkpointCategories[0]?.id || null;
-
-  renderTabs();
-  renderPrompts();
-  renderCheckpoints();
-
-  bindTabEvents();
-  bindPromptEvents();
-  bindCheckpointEvents();
+  bindEvents();
+  render();
 }
 
 init();
