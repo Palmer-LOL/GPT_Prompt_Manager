@@ -229,6 +229,30 @@ function placeItemInCategory(mode, item, categoryId, requestedPosition) {
   }
 }
 
+function getMode(mode) {
+  return MODES[mode];
+}
+
+function getStateValue(mode, key) {
+  const config = getMode(mode);
+  return state[config.data[key]];
+}
+
+function setStateValue(mode, key, value) {
+  const config = getMode(mode);
+  state[config.data[key]] = value;
+}
+
+function getLibraryCollection(mode, key) {
+  const config = getMode(mode);
+  return state.library[config.data[key]];
+}
+
+function getElement(mode, key) {
+  const config = getMode(mode);
+  return el[config.elements[key]];
+}
+
 function renderTabs() {
   Object.values(MODES).forEach((modeConfig) => {
     const isActive = state.activeTab === modeConfig.id;
