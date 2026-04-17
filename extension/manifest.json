@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GPT Prompt Manager Extension",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Popup browse/copy with standalone dashboard for managing prompts and checkpoints.",
   "permissions": [
     "clipboardWrite",

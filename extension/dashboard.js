@@ -24,6 +24,7 @@ const MODES = {
       editorTitle: 'promptEditorTitle',
       editorDescription: 'promptEditorDescription',
       editorBody: 'promptEditorBody',
+      editorPosition: 'promptEditorPosition',
       editorSavedAt: 'promptEditorSavedAt',
       save: 'promptSave',
       cancel: 'promptCancel'
@@ -63,6 +64,8 @@ const MODES = {
       editorTitle: 'checkpointEditorTitle',
       editorDescription: 'checkpointEditorDescription',
       editorBody: 'checkpointEditorBody',
+      editorPosition: 'checkpointEditorPosition',
+      editorSavedAt: 'checkpointEditorSavedAt',
       save: 'checkpointSave',
       cancel: 'checkpointCancel'
     },
@@ -108,6 +111,7 @@ const el = {
   promptEditorTitle: document.querySelector('#prompt-editor-title'),
   promptEditorDescription: document.querySelector('#prompt-editor-description'),
   promptEditorBody: document.querySelector('#prompt-editor-body'),
+  promptEditorPosition: document.querySelector('#prompt-editor-position'),
   promptEditorSavedAt: document.querySelector('#prompt-editor-saved-at'),
   promptSave: document.querySelector('#prompt-save'),
   promptCancel: document.querySelector('#prompt-cancel'),
@@ -121,6 +125,8 @@ const el = {
   checkpointEditorTitle: document.querySelector('#checkpoint-editor-title'),
   checkpointEditorDescription: document.querySelector('#checkpoint-editor-description'),
   checkpointEditorBody: document.querySelector('#checkpoint-editor-body'),
+  checkpointEditorPosition: document.querySelector('#checkpoint-editor-position'),
+  checkpointEditorSavedAt: document.querySelector('#checkpoint-editor-saved-at'),
   checkpointSave: document.querySelector('#checkpoint-save'),
   checkpointCancel: document.querySelector('#checkpoint-cancel')
 };
@@ -152,27 +158,75 @@ function moveInArray(list, index, direction) {
   return true;
 }
 
-function moveItemWithinCategory(items, id, direction) {
-  const index = items.findIndex((item) => item.id === id);
-  if (index < 0) {
-    return false;
+function getMode(mode) {
+  return MODES[mode];
+}
+
+function getStateValue(mode, key) {
+  const config = getMode(mode);
+  return state[config.data[key]];
+}
+
+function setStateValue(mode, key, value) {
+  const config = getMode(mode);
+  state[config.data[key]] = value;
+}
+
+function getLibraryCollection(mode, key) {
+  const config = getMode(mode);
+  return state.library[config.data[key]];
+}
+
+function getElement(mode, key) {
+  const config = getMode(mode);
+  return el[config.elements[key]];
+}
+
+function getCategoryItems(mode, categoryId) {
+  const items = getLibraryCollection(mode, 'items');
+  return items
+    .filter((item) => item.categoryId === categoryId)
+    .sort((a, b) => (a.position || 1) - (b.position || 1));
+}
+
+function normalizeCategoryPositions(mode, categoryId) {
+  const categoryItems = getCategoryItems(mode, categoryId);
+  categoryItems.forEach((item, index) => {
+    item.position = index + 1;
+  });
+}
+
+function parseTargetPosition(value, maxPosition) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return maxPosition;
   }
+  return Math.min(Math.max(parsed, 1), maxPosition);
+}
 
-  const { categoryId } = items[index];
-  const sameCategoryIndexes = items
-    .map((item, itemIndex) => ({ item, itemIndex }))
-    .filter(({ item }) => item.categoryId === categoryId)
-    .map(({ itemIndex }) => itemIndex);
+function placeItemInCategory(mode, item, categoryId, requestedPosition) {
+  const items = getLibraryCollection(mode, 'items');
+  const oldCategoryId = item.categoryId;
 
-  const position = sameCategoryIndexes.indexOf(index);
-  const targetPosition = position + direction;
-  if (position < 0 || targetPosition < 0 || targetPosition >= sameCategoryIndexes.length) {
-    return false;
+  const keepItems = items.filter((entry) => entry.id !== item.id);
+  const otherCategoryItems = keepItems.filter((entry) => entry.categoryId !== categoryId);
+  const targetCategoryItems = keepItems
+    .filter((entry) => entry.categoryId === categoryId)
+    .sort((a, b) => (a.position || 1) - (b.position || 1));
+
+  const targetPosition = parseTargetPosition(requestedPosition, targetCategoryItems.length + 1);
+  targetCategoryItems.splice(targetPosition - 1, 0, item);
+
+  targetCategoryItems.forEach((entry, index) => {
+    entry.categoryId = categoryId;
+    entry.position = index + 1;
+  });
+
+  state.library[getMode(mode).data.items] = [...otherCategoryItems, ...targetCategoryItems];
+
+  if (oldCategoryId && oldCategoryId !== categoryId) {
+    normalizeCategoryPositions(mode, oldCategoryId);
   }
-
-  const targetIndex = sameCategoryIndexes[targetPosition];
-  [items[index], items[targetIndex]] = [items[targetIndex], items[index]];
-  return true;
 }
 
 function getMode(mode) {
@@ -329,7 +383,7 @@ function renderModeCategories(mode) {
 function renderModeItems(mode) {
   const config = getMode(mode);
   const selectedCategoryId = getStateValue(mode, 'selectedCategoryId');
-  const items = getLibraryCollection(mode, 'items').filter((item) => item.categoryId === selectedCategoryId);
+  const items = getCategoryItems(mode, selectedCategoryId);
   const itemsListEl = getElement(mode, 'items');
 
   itemsListEl.replaceChildren();
@@ -348,7 +402,7 @@ function renderModeItems(mode) {
     setStateValue(mode, 'selectedItemId', items[0].id);
   }
 
-  items.forEach((item, index) => {
+  items.forEach((item) => {
     const selectButton = makeButton('Select', () => {
       setStateValue(mode, 'selectedItemId', item.id);
       setStateValue(mode, 'editingItemId', null);
@@ -360,23 +414,12 @@ function renderModeItems(mode) {
       renderModeEditor(mode);
     });
 
-    const upButton = makeButton('↑', async () => {
-      if (!moveItemWithinCategory(getLibraryCollection(mode, 'items'), item.id, -1)) return;
-      await persist();
-      renderMode(mode);
-    }, index === 0);
-
-    const downButton = makeButton('↓', async () => {
-      if (!moveItemWithinCategory(getLibraryCollection(mode, 'items'), item.id, 1)) return;
-      await persist();
-      renderMode(mode);
-    }, index === items.length - 1);
-
     const deleteButton = makeButton('Delete', async () => {
       const ok = confirm(`Delete ${config.copy.entityLower} "${item.title}"?`);
       if (!ok) return;
 
       state.library[config.data.items] = getLibraryCollection(mode, 'items').filter((entry) => entry.id !== item.id);
+      normalizeCategoryPositions(mode, item.categoryId);
       if (getStateValue(mode, 'selectedItemId') === item.id) {
         setStateValue(mode, 'selectedItemId', null);
       }
@@ -390,9 +433,9 @@ function renderModeItems(mode) {
     const savedAt = new Date(item.savedAt).toLocaleString();
     itemsListEl.appendChild(createListItem({
       label: item.title,
-      meta: `Saved ${savedAt}`,
+      meta: `Position ${item.position || 1} • Saved ${savedAt}`,
       selected: getStateValue(mode, 'selectedItemId') === item.id,
-      controls: [selectButton, editButton, upButton, downButton, deleteButton]
+      controls: [selectButton, editButton, deleteButton]
     }));
   });
 }
@@ -403,6 +446,7 @@ function renderModeEditor(mode) {
   const editorTitleEl = getElement(mode, 'editorTitle');
   const editorDescriptionEl = getElement(mode, 'editorDescription');
   const editorBodyEl = getElement(mode, 'editorBody');
+  const editorPositionEl = getElement(mode, 'editorPosition');
   const saveEl = getElement(mode, 'save');
 
   editorCategoryEl.replaceChildren(
@@ -422,12 +466,15 @@ function renderModeEditor(mode) {
   editorTitleEl.disabled = categories.length === 0;
   editorDescriptionEl.disabled = categories.length === 0;
   editorBodyEl.disabled = categories.length === 0;
+  editorPositionEl.disabled = categories.length === 0;
   saveEl.disabled = categories.length === 0;
 
   editorCategoryEl.value = selectedCategory;
   editorTitleEl.value = editing?.title || '';
   editorDescriptionEl.value = editing?.description || '';
   editorBodyEl.value = editing?.body || '';
+  const positionDefault = editing?.position || (selectedCategory ? getCategoryItems(mode, selectedCategory).length + 1 : 1);
+  editorPositionEl.value = String(positionDefault);
 
   const savedAtEl = getElement(mode, 'editorSavedAt');
   if (savedAtEl) {
@@ -445,6 +492,7 @@ function bindModeEvents(mode) {
   const editorTitleEl = getElement(mode, 'editorTitle');
   const editorDescriptionEl = getElement(mode, 'editorDescription');
   const editorBodyEl = getElement(mode, 'editorBody');
+  const editorPositionEl = getElement(mode, 'editorPosition');
   const saveEl = getElement(mode, 'save');
   const cancelEl = getElement(mode, 'cancel');
   const savedAtEl = getElement(mode, 'editorSavedAt');
@@ -463,12 +511,14 @@ function bindModeEvents(mode) {
     editorTitleEl.value = '';
     editorDescriptionEl.value = '';
     editorBodyEl.value = '';
+    editorPositionEl.value = '';
     if (savedAtEl) {
       savedAtEl.value = 'Not saved yet';
     }
     const selectedCategoryId = getStateValue(mode, 'selectedCategoryId');
     if (selectedCategoryId) {
       editorCategoryEl.value = selectedCategoryId;
+      editorPositionEl.value = String(getCategoryItems(mode, selectedCategoryId).length + 1);
     }
   });
 
@@ -477,6 +527,7 @@ function bindModeEvents(mode) {
     const title = editorTitleEl.value.trim();
     const description = editorDescriptionEl.value.trim();
     const body = editorBodyEl.value;
+    const requestedPosition = editorPositionEl.value;
 
     if (!categoryId) {
       alert(config.copy.createCategoryFirst);
@@ -496,21 +547,24 @@ function bindModeEvents(mode) {
         alert(config.copy.missingItem);
         setStateValue(mode, 'editingItemId', null);
       } else {
-        editing.categoryId = categoryId;
         editing.title = title;
         editing.description = description;
         editing.body = body;
         editing.savedAt = new Date().toISOString();
+        placeItemInCategory(mode, editing, categoryId, requestedPosition);
       }
     } else {
-      items.push({
+      const newItem = {
         id: createId(config.copy.itemIdPrefix),
         categoryId,
+        position: 1,
         title,
         description,
         body,
         savedAt: new Date().toISOString()
-      });
+      };
+      items.push(newItem);
+      placeItemInCategory(mode, newItem, categoryId, requestedPosition);
     }
 
     setStateValue(mode, 'selectedCategoryId', categoryId);

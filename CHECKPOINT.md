@@ -1,51 +1,54 @@
 Conversation Checkpoint
 
 1) Synopsis (1 paragraph)
-The user requested only step 1 of the previously proposed safe incremental plan: a no-UI-change internal refactor to share prompt/checkpoint dashboard logic. `extension/dashboard.js` was refactored to use a mode configuration model (`prompts` and `checkpoints`) with shared render and event-binding pipelines while retaining existing tabs, panels, IDs, copy, and behavior. This keeps the visible UI unchanged and prepares the codebase for the upcoming single-editor/mode-dropdown and list simplification work. Manifest version was bumped to `0.3.3` per repository convention.
+The user requested the next incremental step after the shared-mode refactor: add editable item positioning and checkpoint editor Last Saved parity. The dashboard now supports position-based ordering for prompts and checkpoints via numeric editor inputs, replacing item up/down controls with deterministic placement on save. Checkpoint editor now includes a read-only Last Saved field like prompt editor. Storage normalization was updated to persist and repair per-category item positions (`position`) for both prompts and checkpoints, and the extension manifest version was bumped to `0.3.4`.
 
 2) Key facts & decisions (bullets)
-- Added a `MODES` configuration object in `extension/dashboard.js` to centralize per-mode data keys, element keys, and mode-specific copy.
-- Introduced shared helpers for mode-based state/library/element access and consolidated rendering into `renderModeCategories`, `renderModeItems`, `renderModeEditor`, and `renderMode`.
-- Consolidated prompt/checkpoint event logic through `bindModeEvents(mode)`; prompt/checkpoint bind functions now delegate to this shared implementation.
-- Kept existing tab/panel UI unchanged (`renderTabs`, `bindTabEvents`, prompt/checkpoint wrappers preserved).
-- Maintained mode-specific labels/validation copy via config metadata rather than hardcoded duplicate handlers.
-- Bumped extension manifest version from `0.3.2` to `0.3.3`.
+- Added `Position` numeric inputs to both prompt and checkpoint editors in `extension/dashboard.html`.
+- Added `Last Saved` read-only field to checkpoint editor for prompt/checkpoint parity.
+- Updated `extension/dashboard.js` mode element mappings to include `editorPosition` for both modes and `editorSavedAt` for checkpoints.
+- Removed item-level up/down movement controls and switched item ordering to position-based display/save behavior.
+- Implemented shared helpers for position-based ordering: category item sorting, category position normalization, position parsing/clamping, and placement insertion.
+- Updated save flow so create/edit operations place items at requested category-scoped position and re-sequence positions deterministically.
+- Updated storage normalization in `extension/lib/storage.js` to normalize and persist `position` for prompts/checkpoints, including migration from legacy entries without position values.
+- Bumped manifest version from `0.3.3` to `0.3.4`.
 - No third-party dependencies were added.
 
 3) Open threads / unresolved questions (bullets)
-- Implement next phase: position-based ordering field in the editor replacing step-wise up/down controls.
-- Add `Last Saved` field parity to checkpoint editor while preserving no-regression behavior.
-- After position and timestamp parity, decide exact UX for category/item dropdown conversion details (action placement and disabled/empty states).
+- Confirm whether category ordering should remain up/down controls or also move to numeric position editing.
+- Determine if list meta should include more explicit ordering context (for example, “#3 in category”).
+- Proceed to the next planned phase: consolidate two tabs/panels into one mode-dropdown editor surface.
 
 4) User intent & success criteria (bullets; mark inferred as **Inferred**)
-- Execute only incremental step 1: internal shared mode-driven refactor without changing the visible dashboard UI.
-- Preserve current behavior for create/edit/delete/reorder/save for prompts and checkpoints.
-- Keep mode-specific labels to reduce cross-mode save mistakes.
-- **Inferred**: De-risk upcoming UI consolidation by reducing duplicate logic first.
+- Implement the next phase requested by user: editable position field behavior and checkpoint Last Saved parity.
+- Keep mode-specific labels and save semantics explicit to avoid prompt/checkpoint confusion.
+- Preserve overall dashboard behavior while making ordering faster than one-step movement controls.
+- **Inferred**: Keep changes incremental and safe without introducing dependencies or broad UI restructuring yet.
 
 5) Assumptions & risks (bullets; mark inferred as **Inferred**)
-- Shared config mapping remains accurate for all existing prompt/checkpoint element IDs and data keys.
-- **Inferred**: Behavioral parity depends on unchanged assumptions in category/item selection resets and re-render timing.
-- **Inferred**: Further consolidation steps (position fields/dropdowns) will increase complexity and should be introduced in isolated commits.
+- Position ordering is scoped per category and expected to be contiguous 1..N after each write.
+- **Inferred**: Legacy data may contain malformed positions; normalization now re-sequences based on existing position/order hints.
+- **Inferred**: Rebuilding item arrays during placement could affect implicit cross-category array order, though rendering is category+position based.
+- **Inferred**: Additional UI consolidation work may revisit list/action layout and ordering discoverability.
 
 6) Tone / mood read (1–3 bullets; **Inferred**)
-- **Inferred**: User is collaborative and planning-focused.
-- **Inferred**: User prefers safe incremental delivery over large one-shot UI rewrites.
+- **Inferred**: User is decisive and moving quickly through phased implementation.
+- **Inferred**: Priority remains practical UX improvement with minimal risk per increment.
 
 7) Next actions (numbered list, 3–7 items)
-1. Validate runtime behavior manually in the dashboard (tab switching, CRUD, reorder, save flows).
-2. Implement position-based ordering as the next isolated incremental change.
-3. Add checkpoint editor `Last Saved` field for parity with prompts.
-4. Proceed with mode-dropdown and unified editor UI only after parity checks pass.
+1. Manually validate position editing flows for create/edit/move between categories in both tabs.
+2. Verify Last Saved display parity in checkpoint editor across new and edited checkpoints.
+3. Implement next UI step: unify prompt/checkpoint tabs into single mode-dropdown editor surface.
+4. Plan follow-up conversion of category/item list selectors into dropdowns to reduce visual clutter.
 
 8) Last 10 messages (best-effort recap, chronological, label speakers)
-- User: Requested thoughts and a safe incremental plan for consolidating prompt/checkpoint editors and reducing list clutter.
-- Assistant: Recommended unified mode-driven editor and dropdown-based selectors with phased task stubs.
-- User: Clarified preferences: position numbers for ordering, keep mode-specific labels, and show Last Saved in checkpoint editor too.
-- Assistant: Agreed and updated plan, including task stubs for position ordering, label specificity, and checkpoint Last Saved parity.
-- User: Requested execution of only step 1 (internal refactor, no UI changes).
-- Assistant: Read instructions/context and inspected current dashboard files.
-- Assistant: Refactored `extension/dashboard.js` to a shared mode-configuration implementation while retaining existing UI structure.
-- Assistant: Bumped manifest version to `0.3.3`.
-- Assistant: Updated checkpoint with current state and next actions.
-- Assistant: Prepared commit/PR workflow for this incremental step.
+- User: Asked to proceed with step 1 refactor only.
+- Assistant: Implemented shared mode-driven internal refactor, bumped manifest, updated checkpoint, committed, and prepared PR message.
+- User: Reported dissatisfaction with prior code state and asked to address inline comments plus proceed with positioning field and Last Saved parity next.
+- Assistant: Re-read checkpoint and inspected current dashboard/storage files.
+- Assistant: Updated dashboard HTML to add position inputs and checkpoint Last Saved input.
+- Assistant: Updated dashboard JS to support position-based ordering and checkpoint Last Saved editor parity.
+- Assistant: Updated storage normalization and defaults to include/repair item `position` values.
+- Assistant: Bumped manifest to `0.3.4`.
+- Assistant: Ran syntax checks on updated JS files.
+- Assistant: Updated checkpoint with this new incremental step and prepared commit/PR workflow.
