@@ -50,6 +50,9 @@
               <label for="prompt-editor-body">Body</label>
               <textarea id="prompt-editor-body" rows="12" placeholder="Prompt body"></textarea>
 
+              <label for="prompt-editor-position">Position</label>
+              <input id="prompt-editor-position" type="number" min="1" step="1" placeholder="1" />
+
               <label for="prompt-editor-saved-at">Last Saved</label>
               <input id="prompt-editor-saved-at" type="text" readonly />
             </div>
@@ -92,6 +95,12 @@
 
               <label for="checkpoint-editor-body">Body</label>
               <textarea id="checkpoint-editor-body" rows="10" placeholder="Checkpoint body"></textarea>
+
+              <label for="checkpoint-editor-position">Position</label>
+              <input id="checkpoint-editor-position" type="number" min="1" step="1" placeholder="1" />
+
+              <label for="checkpoint-editor-saved-at">Last Saved</label>
+              <input id="checkpoint-editor-saved-at" type="text" readonly />
             </div>
             <div class="actions">
               <button id="checkpoint-save" type="button">Save Checkpoint</button>
