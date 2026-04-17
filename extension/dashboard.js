@@ -148,16 +148,6 @@ async function persist() {
   setStatus('Saved.');
 }
 
-function moveInArray(list, index, direction) {
-  const nextIndex = index + direction;
-  if (index < 0 || nextIndex < 0 || nextIndex >= list.length) {
-    return false;
-  }
-
-  [list[index], list[nextIndex]] = [list[nextIndex], list[index]];
-  return true;
-}
-
 function getMode(mode) {
   return MODES[mode];
 }
@@ -180,6 +170,35 @@ function getLibraryCollection(mode, key) {
 function getElement(mode, key) {
   const config = getMode(mode);
   return el[config.elements[key]];
+}
+
+function getSortedCategories(mode) {
+  return getLibraryCollection(mode, 'categories')
+    .slice()
+    .sort((a, b) => (a.position || 1) - (b.position || 1));
+}
+
+function normalizeCategoryCollectionPositions(mode) {
+  const categories = getSortedCategories(mode);
+  categories.forEach((category, index) => {
+    category.position = index + 1;
+  });
+}
+
+function placeCategoryAtPosition(mode, category, requestedPosition) {
+  const categories = getLibraryCollection(mode, 'categories');
+  const keepCategories = categories.filter((item) => item.id !== category.id);
+  const sortedWithoutCategory = keepCategories
+    .slice()
+    .sort((a, b) => (a.position || 1) - (b.position || 1));
+
+  const targetPosition = parseTargetPosition(requestedPosition, sortedWithoutCategory.length + 1);
+  sortedWithoutCategory.splice(targetPosition - 1, 0, category);
+  sortedWithoutCategory.forEach((item, index) => {
+    item.position = index + 1;
+  });
+
+  state.library[getMode(mode).data.categories] = sortedWithoutCategory;
 }
 
 function getCategoryItems(mode, categoryId) {
@@ -227,30 +246,6 @@ function placeItemInCategory(mode, item, categoryId, requestedPosition) {
   if (oldCategoryId && oldCategoryId !== categoryId) {
     normalizeCategoryPositions(mode, oldCategoryId);
   }
-}
-
-function getMode(mode) {
-  return MODES[mode];
-}
-
-function getStateValue(mode, key) {
-  const config = getMode(mode);
-  return state[config.data[key]];
-}
-
-function setStateValue(mode, key, value) {
-  const config = getMode(mode);
-  state[config.data[key]] = value;
-}
-
-function getLibraryCollection(mode, key) {
-  const config = getMode(mode);
-  return state.library[config.data[key]];
-}
-
-function getElement(mode, key) {
-  const config = getMode(mode);
-  return el[config.elements[key]];
 }
 
 function renderTabs() {
@@ -306,7 +301,7 @@ function renderMode(mode) {
 
 function renderModeCategories(mode) {
   const config = getMode(mode);
-  const categories = getLibraryCollection(mode, 'categories');
+  const categories = getSortedCategories(mode);
   const categoryListEl = getElement(mode, 'categories');
   categoryListEl.replaceChildren();
 
@@ -323,7 +318,7 @@ function renderModeCategories(mode) {
     setStateValue(mode, 'selectedCategoryId', categories[0].id);
   }
 
-  categories.forEach((category, index) => {
+  categories.forEach((category) => {
     const selectButton = makeButton('Select', () => {
       setStateValue(mode, 'selectedCategoryId', category.id);
       setStateValue(mode, 'selectedItemId', null);
@@ -331,17 +326,13 @@ function renderModeCategories(mode) {
       renderMode(mode);
     });
 
-    const upButton = makeButton('↑', async () => {
-      if (!moveInArray(categories, index, -1)) return;
+    const setPositionButton = makeButton('Set Pos', async () => {
+      const nextPosition = prompt('Set category position', String(category.position || 1));
+      if (nextPosition === null) return;
+      placeCategoryAtPosition(mode, category, nextPosition);
       await persist();
       renderMode(mode);
-    }, index === 0);
-
-    const downButton = makeButton('↓', async () => {
-      if (!moveInArray(categories, index, 1)) return;
-      await persist();
-      renderMode(mode);
-    }, index === categories.length - 1);
+    });
 
     const renameButton = makeButton('Rename', async () => {
       const nextName = prompt('Rename category', category.name);
@@ -359,6 +350,7 @@ function renderModeCategories(mode) {
 
       state.library[config.data.categories] = categories.filter((item) => item.id !== category.id);
       state.library[config.data.items] = items.filter((item) => item.categoryId !== category.id);
+      normalizeCategoryCollectionPositions(mode);
 
       if (getStateValue(mode, 'selectedCategoryId') === category.id) {
         setStateValue(mode, 'selectedCategoryId', null);
@@ -374,8 +366,9 @@ function renderModeCategories(mode) {
 
     categoryListEl.appendChild(createListItem({
       label: category.name,
+      meta: `Position ${category.position || 1}`,
       selected: getStateValue(mode, 'selectedCategoryId') === category.id,
-      controls: [selectButton, upButton, downButton, renameButton, deleteButton]
+      controls: [selectButton, setPositionButton, renameButton, deleteButton]
     }));
   });
 }
@@ -441,7 +434,7 @@ function renderModeItems(mode) {
 }
 
 function renderModeEditor(mode) {
-  const categories = getLibraryCollection(mode, 'categories');
+  const categories = getSortedCategories(mode);
   const editorCategoryEl = getElement(mode, 'editorCategory');
   const editorTitleEl = getElement(mode, 'editorTitle');
   const editorDescriptionEl = getElement(mode, 'editorDescription');
@@ -500,7 +493,12 @@ function bindModeEvents(mode) {
   categoryAddEl.addEventListener('click', async () => {
     const name = categoryNameEl.value.trim();
     if (!name) return;
-    getLibraryCollection(mode, 'categories').push({ id: createId(config.copy.categoryIdPrefix), name });
+    const categories = getSortedCategories(mode);
+    getLibraryCollection(mode, 'categories').push({
+      id: createId(config.copy.categoryIdPrefix),
+      name,
+      position: categories.length + 1
+    });
     categoryNameEl.value = '';
     await persist();
     renderMode(mode);
@@ -610,8 +608,8 @@ function bindTabEvents() {
 async function init() {
   state.library = await loadLibrary();
 
-  state.selectedPromptCategoryId = state.library.categories[0]?.id || null;
-  state.selectedCheckpointCategoryId = state.library.checkpointCategories[0]?.id || null;
+  state.selectedPromptCategoryId = getSortedCategories('prompts')[0]?.id || null;
+  state.selectedCheckpointCategoryId = getSortedCategories('checkpoints')[0]?.id || null;
 
   renderTabs();
   renderPrompts();

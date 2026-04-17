@@ -2,8 +2,8 @@ export const STORAGE_KEY_LIBRARY = 'gpm_library_v1';
 
 const DEFAULT_LIBRARY = {
   categories: [
-    { id: 'cat_writing', name: 'Writing' },
-    { id: 'cat_engineering', name: 'Engineering' }
+    { id: 'cat_writing', name: 'Writing', position: 1 },
+    { id: 'cat_engineering', name: 'Engineering', position: 2 }
   ],
   prompts: [
     {
@@ -26,7 +26,7 @@ const DEFAULT_LIBRARY = {
     }
   ],
   checkpointCategories: [
-    { id: 'cp_cat_session', name: 'Session' }
+    { id: 'cp_cat_session', name: 'Session', position: 1 }
   ],
   checkpoints: [
     {
@@ -76,17 +76,39 @@ export function normalizeLibrary(library) {
     return base;
   }
 
-  const categories = uniqueById(Array.isArray(library.categories) ? library.categories : []).map((category) => ({
-    id: String(category.id),
-    name: String(category.name || category.id).trim()
-  }));
+  const normalizePositionedCategories = (inputCategories) => {
+    const normalized = uniqueById(Array.isArray(inputCategories) ? inputCategories : []).map((category, index) => {
+      const parsedPosition = Number.parseInt(category.position, 10);
+      return {
+        id: String(category.id),
+        name: String(category.name || category.id).trim(),
+        position: Number.isFinite(parsedPosition) && parsedPosition > 0 ? parsedPosition : null,
+        __index: index
+      };
+    });
 
-  const checkpointCategories = uniqueById(
-    Array.isArray(library.checkpointCategories) ? library.checkpointCategories : []
-  ).map((category) => ({
-    id: String(category.id),
-    name: String(category.name || category.id).trim()
-  }));
+    const ordered = [...normalized].sort((a, b) => {
+      const aPosition = a.position ?? Number.MAX_SAFE_INTEGER;
+      const bPosition = b.position ?? Number.MAX_SAFE_INTEGER;
+      if (aPosition === bPosition) {
+        return a.__index - b.__index;
+      }
+      return aPosition - bPosition;
+    });
+
+    const positionById = new Map();
+    ordered.forEach((category, index) => {
+      positionById.set(category.id, index + 1);
+    });
+
+    return normalized.map(({ __index, ...category }) => ({
+      ...category,
+      position: positionById.get(category.id) || 1
+    }));
+  };
+
+  const categories = normalizePositionedCategories(library.categories);
+  const checkpointCategories = normalizePositionedCategories(library.checkpointCategories);
 
   const categoryIds = new Set(categories.map((category) => category.id));
   const checkpointCategoryIds = new Set(checkpointCategories.map((category) => category.id));
