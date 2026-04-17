@@ -1,49 +1,54 @@
 Conversation Checkpoint
 
 1) Synopsis (1 paragraph)
-A follow-up PR review flagged timestamp drift for migrated legacy prompts: `normalizeLibrary` generated a fresh `savedAt` on each load when missing, but the migrated value was not persisted. This update modifies `loadLibrary` to persist normalized data back to storage whenever normalization changes the payload, which stabilizes generated prompt timestamps after first migration. The extension manifest version was incremented to `0.3.2` for this fix-only patch.
+The user requested the next incremental step after the shared-mode refactor: add editable item positioning and checkpoint editor Last Saved parity. The dashboard now supports position-based ordering for prompts and checkpoints via numeric editor inputs, replacing item up/down controls with deterministic placement on save. Checkpoint editor now includes a read-only Last Saved field like prompt editor. Storage normalization was updated to persist and repair per-category item positions (`position`) for both prompts and checkpoints, and the extension manifest version was bumped to `0.3.4`.
 
 2) Key facts & decisions (bullets)
-- `loadLibrary` now computes `normalized = normalizeLibrary(raw)` and writes it back to `chrome.storage.local` when `raw` differs.
-- This persistence step prevents migrated `prompt.savedAt` values from being regenerated every dashboard load.
-- The fix also persists any other normalization cleanups produced during load.
-- Extension manifest version bumped from `0.3.1` to `0.3.2`.
+- Added `Position` numeric inputs to both prompt and checkpoint editors in `extension/dashboard.html`.
+- Added `Last Saved` read-only field to checkpoint editor for prompt/checkpoint parity.
+- Updated `extension/dashboard.js` mode element mappings to include `editorPosition` for both modes and `editorSavedAt` for checkpoints.
+- Removed item-level up/down movement controls and switched item ordering to position-based display/save behavior.
+- Implemented shared helpers for position-based ordering: category item sorting, category position normalization, position parsing/clamping, and placement insertion.
+- Updated save flow so create/edit operations place items at requested category-scoped position and re-sequence positions deterministically.
+- Updated storage normalization in `extension/lib/storage.js` to normalize and persist `position` for prompts/checkpoints, including migration from legacy entries without position values.
+- Bumped manifest version from `0.3.3` to `0.3.4`.
 - No third-party dependencies were added.
 
 3) Open threads / unresolved questions (bullets)
-- Confirm whether checkpoint entries should receive the same migration/audit treatment in UI copy for historical accuracy messaging.
-- Decide whether deep equality for migration persistence should move to a dedicated helper for readability and future testability.
-- Decide whether prompt/checkpoint editor consolidation remains the next incremental UX scope.
+- Confirm whether category ordering should remain up/down controls or also move to numeric position editing.
+- Determine if list meta should include more explicit ordering context (for example, “#3 in category”).
+- Proceed to the next planned phase: consolidate two tabs/panels into one mode-dropdown editor surface.
 
 4) User intent & success criteria (bullets; mark inferred as **Inferred**)
-- Address PR feedback at `extension/lib/storage.js` regarding drifting migrated prompt timestamps.
-- Ensure legacy prompts missing `savedAt` gain a stable persisted timestamp after migration.
-- Keep the change minimal and aligned with current storage architecture.
-- **Inferred**: Avoid introducing behavior changes beyond timestamp stabilization and normalization persistence.
+- Implement the next phase requested by user: editable position field behavior and checkpoint Last Saved parity.
+- Keep mode-specific labels and save semantics explicit to avoid prompt/checkpoint confusion.
+- Preserve overall dashboard behavior while making ordering faster than one-step movement controls.
+- **Inferred**: Keep changes incremental and safe without introducing dependencies or broad UI restructuring yet.
 
 5) Assumptions & risks (bullets; mark inferred as **Inferred**)
-- Using `JSON.stringify` comparison is acceptable for current plain-object library structures.
-- **Inferred**: Future key-order or non-serializable fields could make stringify-based comparison less robust.
-- The first migration still assigns a generated timestamp when historical values are absent; this remains an approximation.
+- Position ordering is scoped per category and expected to be contiguous 1..N after each write.
+- **Inferred**: Legacy data may contain malformed positions; normalization now re-sequences based on existing position/order hints.
+- **Inferred**: Rebuilding item arrays during placement could affect implicit cross-category array order, though rendering is category+position based.
+- **Inferred**: Additional UI consolidation work may revisit list/action layout and ordering discoverability.
 
 6) Tone / mood read (1–3 bullets; **Inferred**)
-- **Inferred**: Feedback is practical and correctness-focused.
-- **Inferred**: Priority is eliminating misleading UX signals with minimal churn.
+- **Inferred**: User is decisive and moving quickly through phased implementation.
+- **Inferred**: Priority remains practical UX improvement with minimal risk per increment.
 
 7) Next actions (numbered list, 3–7 items)
-1. Run quick sanity checks for modified extension files.
-2. Commit timestamp migration persistence fix and manifest bump.
-3. Prepare PR summary describing the bug and stabilization behavior.
-4. Track optional follow-up to refactor normalization-diff detection helper.
+1. Manually validate position editing flows for create/edit/move between categories in both tabs.
+2. Verify Last Saved display parity in checkpoint editor across new and edited checkpoints.
+3. Implement next UI step: unify prompt/checkpoint tabs into single mode-dropdown editor surface.
+4. Plan follow-up conversion of category/item list selectors into dropdowns to reduce visual clutter.
 
 8) Last 10 messages (best-effort recap, chronological, label speakers)
-- User: Provided AGENTS instructions requiring checkpoint usage and updates for all repo changes.
-- User: Sent PR follow-up trigger to address review feedback on `extension/lib/storage.js` line 99.
-- User: Included PR metadata describing schema-alignment changes and current branch state.
-- User: Included reviewer comment noting migrated prompt `savedAt` drift when reopening dashboard.
-- User: Included Codex automated review context comment.
-- Assistant: Read repository instructions and current checkpoint for continuity.
-- Assistant: Inspected `extension/lib/storage.js` around the referenced line and validated the drift issue.
-- Assistant: Implemented `loadLibrary` persistence of normalized data when raw data differs.
-- Assistant: Bumped manifest version to `0.3.2` per repository convention.
-- Assistant: Updated checkpoint to capture this follow-up fix and remaining decisions.
+- User: Asked to proceed with step 1 refactor only.
+- Assistant: Implemented shared mode-driven internal refactor, bumped manifest, updated checkpoint, committed, and prepared PR message.
+- User: Reported dissatisfaction with prior code state and asked to address inline comments plus proceed with positioning field and Last Saved parity next.
+- Assistant: Re-read checkpoint and inspected current dashboard/storage files.
+- Assistant: Updated dashboard HTML to add position inputs and checkpoint Last Saved input.
+- Assistant: Updated dashboard JS to support position-based ordering and checkpoint Last Saved editor parity.
+- Assistant: Updated storage normalization and defaults to include/repair item `position` values.
+- Assistant: Bumped manifest to `0.3.4`.
+- Assistant: Ran syntax checks on updated JS files.
+- Assistant: Updated checkpoint with this new incremental step and prepared commit/PR workflow.
