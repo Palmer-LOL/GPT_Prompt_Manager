@@ -144,7 +144,13 @@ export async function loadLibrary() {
     return seed;
   }
 
-  return normalizeLibrary(raw);
+  const normalized = normalizeLibrary(raw);
+  if (JSON.stringify(raw) !== JSON.stringify(normalized)) {
+    await chrome.storage.local.set({
+      [STORAGE_KEY_LIBRARY]: normalized
+    });
+  }
+  return normalized;
 }
 
 export async function saveLibrary(library) {
